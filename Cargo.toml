@@ -1,0 +1,19 @@
+[package]
+name = "cpp"
+version = "0.0.1"
+authors = ["Michael Layzell <michael@thelayzells.com>"]
+
+description = "Call C++ code from rust"
+repository = "https://github.com/mystor/rust-cpp"
+readme = "README.md"
+license = "MPL-2.0"
+keywords = ["c++", "ffi"]
+
+[lib]
+name = "cpp"
+plugin = true
+
+[dependencies]
+uuid = "0.1"
+lazy_static = "0.1"
+gcc = "0.3"
