@@ -15,11 +15,8 @@ fn basic_math() {
 
     let cpp_result = unsafe {
         cpp!((a, b) -> i32 {
-            int32_t* av = (int32_t*) a;
-            int32_t* bv = (int32_t*) b;
-
-            int32_t c = *av * 10;
-            int32_t d = *bv * 20;
+            int32_t c = *a * 10;
+            int32_t d = *b * 20;
 
             std::cout << "Hello from C++!\n";
 
@@ -38,14 +35,11 @@ fn strings() {
     let cs = CString::new(csvec).unwrap();
     let mut local_cstring = cs.as_ptr();
 
-    let cpp_result = unsafe {
-        cpp!((mut local_cstring) -> i32 {
-            (*(char**)local_cstring)[3] = 'a';
+    unsafe {
+        cpp!((mut local_cstring) {
+            (*local_cstring)[3] = 'a';
+        });
+    }
 
-            return 5;
-        })
-    };
-
-    assert_eq!(cpp_result, 5);
     assert_eq!(cs.as_bytes(), b"Helao, World!");
 }

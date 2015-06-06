@@ -362,7 +362,9 @@ impl LintPass for CppLintPass {
     }
 }
 
-fn type_to_cpp_type(ty: ty::Ty) -> String {
+fn type_to_cpp_type(ty: ty::Ty, level: usize, maxlevel: usize) -> String {
+    if level > maxlevel { return format!("void"); }
+
     match ty.sty {
         ty_bool => format!("int8_t"),
 
@@ -381,10 +383,29 @@ fn type_to_cpp_type(ty: ty::Ty) -> String {
         ty_float(TyF32) => format!("float"),
         ty_float(TyF64) => format!("double"),
 
-        ty_ptr(..) => format!("void*"),
-        ty_rptr(..) => format!("void*"),
+        ty_ptr(ref ty) => format!("{}*", type_to_cpp_type(ty.ty, level + 1, maxlevel)),
+        ty_rptr(_, ref ty) => format!("{}*", type_to_cpp_type(ty.ty, level + 1, maxlevel)),
 
-        _ => panic!("Illegal cpp! return type"),
+        ty_tup(ref it) => {
+            if it.len() == 0 {
+                // Unit type
+                format!("void")
+            } else {
+                if level == 0 {
+                    panic!("Illegal cpp! return type")
+                } else {
+                    format!("void")
+                }
+            }
+        }
+
+        _ => {
+            if level == 0 {
+                panic!("Illegal cpp! return type")
+            } else {
+                format!("void")
+            }
+        }
     }
 }
 
@@ -395,7 +416,22 @@ fn record_type_data(cx: &Context,
     let mut decls = CPP_FNDECLS.lock().unwrap();
     if let Some(cppfn) = decls.get_mut(name) {
         let ret_ty = expr_ty(cx.tcx, call);
-        cppfn.ret_ty = Some(type_to_cpp_type(ret_ty));
+        cppfn.ret_ty = Some(type_to_cpp_type(ret_ty, 0, 10));
+
+        for (i, arg) in args.iter().enumerate() {
+            // Strip the two casts off
+            if let ExprCast(ref e, _) = arg.node {
+                if let ExprCast(ref e, _) = e.node {
+                    if let ExprAddrOf(_, ref e) = e.node {
+                        let arg_ty = expr_ty(cx.tcx, e);
+                        cppfn.arg_idents[i].ty = Some(type_to_cpp_type(arg_ty, 1, 10));
+                        continue
+                    }
+                }
+            }
+
+            panic!("Expected a double-casted reference as an argument.")
+        }
     } else { return }
 
     // We've processed all of them!
