@@ -38,6 +38,7 @@ use rustc::session::search_paths::SearchPaths;
 use rustc::middle::ty;
 use rustc::middle::ty::expr_ty;
 use rustc::middle::ty::sty::*;
+use rustc::util::ppaux::Repr;
 
 
 use uuid::Uuid;
@@ -65,7 +66,7 @@ impl CppParam {
         } else {
             s.push_str("void");
         }
-        s.push_str("* ");
+        s.push_str("& ");
 
         s.push_str(&self.name);
 
@@ -362,49 +363,77 @@ impl LintPass for CppLintPass {
     }
 }
 
-fn type_to_cpp_type(ty: ty::Ty, level: usize, maxlevel: usize) -> String {
-    if level > maxlevel { return format!("void"); }
-
+/// Generates the c name for a given input type.
+/// If the type can't be represented as a C type, and allow_void is false,
+/// it will be represented by a forward-declaration of a struct. Otherwise,
+/// it will be represented by void.
+///
+/// At any recursion levels greater than 1, allow_void is always true.
+///
+/// if by_value is true, types must be transferable by value through a
+/// function argument or return value.
+fn type_to_cpp_type<'tcx>(tcx: &ty::ctxt<'tcx>,
+                          ty: ty::Ty<'tcx>,
+                          header: &mut String,
+                          by_value: bool,
+                          allow_void: bool) -> String {
     match ty.sty {
-        ty_bool => format!("int8_t"),
+        ty_bool => return format!("int8_t"),
 
-        ty_int(TyIs) => format!("intptr_t"),
-        ty_int(TyI8) => format!("int8_t"),
-        ty_int(TyI16) => format!("int16_t"),
-        ty_int(TyI32) => format!("int32_t"),
-        ty_int(TyI64) => format!("int64_t"),
+        ty_int(TyIs) => return format!("intptr_t"),
+        ty_int(TyI8) => return format!("int8_t"),
+        ty_int(TyI16) => return format!("int16_t"),
+        ty_int(TyI32) => return format!("int32_t"),
+        ty_int(TyI64) => return format!("int64_t"),
 
-        ty_uint(TyUs) => format!("uintptr_t"),
-        ty_uint(TyU8) => format!("uint8_t"),
-        ty_uint(TyU16) => format!("uint16_t"),
-        ty_uint(TyU32) => format!("uint32_t"),
-        ty_uint(TyU64) => format!("uint64_t"),
+        ty_uint(TyUs) => return format!("uintptr_t"),
+        ty_uint(TyU8) => return format!("uint8_t"),
+        ty_uint(TyU16) => return format!("uint16_t"),
+        ty_uint(TyU32) => return format!("uint32_t"),
+        ty_uint(TyU64) => return format!("uint64_t"),
 
-        ty_float(TyF32) => format!("float"),
-        ty_float(TyF64) => format!("double"),
+        ty_float(TyF32) => return format!("float"),
+        ty_float(TyF64) => return format!("double"),
 
-        ty_ptr(ref ty) => format!("{}*", type_to_cpp_type(ty.ty, level + 1, maxlevel)),
-        ty_rptr(_, ref ty) => format!("{}*", type_to_cpp_type(ty.ty, level + 1, maxlevel)),
+        ty_ptr(ref ty) =>
+            return format!("{}*", type_to_cpp_type(tcx, ty.ty, header, false, true)),
+        ty_rptr(_, ref ty) =>
+            return format!("{}*", type_to_cpp_type(tcx, ty.ty, header, false, true)),
+        ty_uniq(ref ty) =>
+            return format!("{}*", type_to_cpp_type(tcx, ty, header, false, true)),
 
-        ty_tup(ref it) => {
-            if it.len() == 0 {
-                // Unit type
-                format!("void")
-            } else {
-                if level == 0 {
-                    panic!("Illegal cpp! return type")
-                } else {
-                    format!("void")
+        ty_tup(ref it) =>
+            if it.len() == 0 && allow_void {
+                return format!("void") // () return type
+            },
+
+        _ => {}
+    }
+
+    if by_value {
+        panic!("Rust type {} cannot be passed by value from C++",
+               ty.repr(tcx).to_string())
+    } else {
+        if allow_void {
+            format!("void")
+        } else {
+            let repr = ty.repr(tcx).to_string();
+            let mut ty_ident = String::new();
+            // Sanitize the repr to only contain valid characters
+            for chr in repr.chars() {
+                match chr {
+                    'a'...'z' | 'A'...'Z' | '_' | '0'...'9' => {
+                        ty_ident.push(chr);
+                    }
+                    _ => {
+                        ty_ident.push('_');
+                    }
                 }
             }
-        }
 
-        _ => {
-            if level == 0 {
-                panic!("Illegal cpp! return type")
-            } else {
-                format!("void")
-            }
+            header.push_str(&format!("\nclass {};", ty_ident));
+
+            ty_ident
         }
     }
 }
@@ -413,10 +442,12 @@ fn record_type_data(cx: &Context,
                     name: &str,
                     call: &Expr,
                     args: &[P<Expr>]) {
+    let mut headers = CPP_HEADERS.lock().unwrap();
     let mut decls = CPP_FNDECLS.lock().unwrap();
+
     if let Some(cppfn) = decls.get_mut(name) {
         let ret_ty = expr_ty(cx.tcx, call);
-        cppfn.ret_ty = Some(type_to_cpp_type(ret_ty, 0, 10));
+        cppfn.ret_ty = Some(type_to_cpp_type(cx.tcx, ret_ty, &mut headers, true, true));
 
         for (i, arg) in args.iter().enumerate() {
             // Strip the two casts off
@@ -424,7 +455,8 @@ fn record_type_data(cx: &Context,
                 if let ExprCast(ref e, _) = e.node {
                     if let ExprAddrOf(_, ref e) = e.node {
                         let arg_ty = expr_ty(cx.tcx, e);
-                        cppfn.arg_idents[i].ty = Some(type_to_cpp_type(arg_ty, 1, 10));
+                        cppfn.arg_idents[i].ty =
+                            Some(type_to_cpp_type(cx.tcx, arg_ty, &mut headers, false, false));
                         continue
                     }
                 }
@@ -437,14 +469,11 @@ fn record_type_data(cx: &Context,
     // We've processed all of them!
     // Finalize!
     if decls.values().all(|x| x.ret_ty.is_some()) {
-        finalize(cx, &mut decls);
+        finalize(cx, &mut headers, &mut decls);
     }
 }
 
-fn finalize(cx: &Context, decls: &mut HashMap<String, CppFn>) {
-    // Generate the c++ we want to compile
-    let headers = CPP_HEADERS.lock().unwrap();
-
+fn finalize(cx: &Context, headers: &mut String, decls: &mut HashMap<String, CppFn>) {
     let fndecls = decls.values().fold(String::new(), |acc, new| {
         format!("{}\n\n{}", acc, new.to_string())
     });

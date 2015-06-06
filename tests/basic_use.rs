@@ -15,8 +15,8 @@ fn basic_math() {
 
     let cpp_result = unsafe {
         cpp!((a, b) -> i32 {
-            int32_t c = *a * 10;
-            int32_t d = *b * 20;
+            int32_t c = a * 10;
+            int32_t d = b * 20;
 
             std::cout << "Hello from C++!\n";
 
@@ -37,9 +37,31 @@ fn strings() {
 
     unsafe {
         cpp!((mut local_cstring) {
-            (*local_cstring)[3] = 'a';
+            local_cstring[3] = 'a';
         });
     }
 
     assert_eq!(cs.as_bytes(), b"Helao, World!");
+}
+
+#[test]
+fn foreign_type() {
+    struct WeirdRustType {
+        a: Vec<u8>,
+        b: String,
+    }
+
+    let a = WeirdRustType {
+        a: Vec::new(),
+        b: String::new(),
+    };
+
+    unsafe {
+        let addr_a = &a as *const WeirdRustType as usize;
+        let c_addr_a = cpp!((a) -> usize {
+            return (uintptr_t) &a;
+        });
+
+        assert_eq!(addr_a, c_addr_a);
+    }
 }
