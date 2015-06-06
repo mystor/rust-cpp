@@ -94,7 +94,7 @@ impl CppFn {
         let c_ty = if let Some(ref ty) = self.ret_ty {
             &ty[..]
         } else {
-            "void"
+            panic!("Unexpected None ret_ty on CppFn")
         };
 
         format!("{} {}({}) {}", c_ty, self.name, c_params, self.body)
@@ -145,30 +145,23 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     // Parse the identifier list
     match parser.parse_token_tree().ok() {
-        Some(TtDelimited(_, ref del)) => {
-            let mut iter = del.tts.iter();
+        Some(TtDelimited(span, ref del)) => {
+            let mut parser = ec.new_parser_from_tts(&del.tts[..]);
             loop {
-                match iter.next() {
-                    None => break,
-                    Some(&TtToken(_, token::Ident(ref id, _))) => {
-                        captured_idents.push(id.clone());
+                if parser.check(&token::Eof) { break }
 
-                        match iter.next() {
-                            Some(&TtToken(_, token::Comma)) => (),
-                            None => break,
-                            Some(tt) => {
-                                ec.span_err(tt.get_span(),
-                                            "Unexpected token in captured ident list");
-                                return DummyResult::expr(tt.get_span());
-                            }
-                        }
-                    }
-                    Some(tt) => {
-                        ec.span_err(tt.get_span(),
-                                    "Unexpected token in captured ident list");
-                        return DummyResult::expr(tt.get_span());
-                    }
+                let mutable = parser.parse_mutability().unwrap_or(MutImmutable);
+                let ident = parser.parse_ident().unwrap();
+                captured_idents.push((ident, mutable));
+
+                if !parser.eat(&token::Comma).unwrap() {
+                    break
                 }
+            }
+            if !parser.check(&token::Eof) {
+                ec.span_err(span,
+                            "Unexpected token in captured identifier list");
+                return DummyResult::expr(span);
             }
         }
         Some(ref tt) => {
@@ -209,23 +202,35 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         }
     };
 
-    let arg_ty = ec.ty_ptr(mac_span,
-                           ec.ty_ident(mac_span,
-                                       Ident::new(intern("u8"))),
-                           MutImmutable);
 
-    let params: Vec<_> = captured_idents.iter().map(|id| {
-        ec.arg(mac_span, id.clone(), arg_ty.clone())
+    // Generate the rust parameters and arguments
+    let params: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
+        let arg_ty = ec.ty_ptr(mac_span,
+                               ec.ty_ident(mac_span,
+                                           Ident::new(intern("u8"))),
+                               mutable);
+        ec.arg(mac_span, id.clone(), arg_ty)
     }).collect();
 
-    let args: Vec<_> = captured_idents.iter().map(|id| {
+    let args: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
+        let arg_ty = ec.ty_ptr(mac_span,
+                               ec.ty_ident(mac_span,
+                                           Ident::new(intern("u8"))),
+                               mutable);
+
+        let addr_of = if mutable == MutImmutable {
+            ec.expr_addr_of(mac_span, ec.expr_ident(mac_span, id.clone()))
+        } else {
+            ec.expr_mut_addr_of(mac_span, ec.expr_ident(mac_span, id.clone()))
+        };
+
         ec.expr_cast(mac_span,
                      ec.expr_cast(mac_span,
-                                  ec.expr_addr_of(mac_span, ec.expr_ident(mac_span, id.clone())),
+                                  addr_of,
                                   ec.ty_ptr(mac_span,
                                             ec.ty_infer(mac_span),
-                                            MutImmutable)),
-                     arg_ty.clone())
+                                            mutable)),
+                     arg_ty)
     }).collect();
 
     let fn_ident = Ident::new(intern(
@@ -292,8 +297,8 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     let cpp_decl = CppFn {
         name: format!("{}", fn_ident.name.as_str()),
-        arg_idents: captured_idents.iter().map(|id| CppParam {
-            mutable: false,
+        arg_idents: captured_idents.iter().map(|&(ref id, mutable)| CppParam {
+            mutable: mutable == MutMutable,
             name: format!("{}", id.name.as_str()),
             ty: None,
         }).collect(),
@@ -304,8 +309,6 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
     // Add the generated function declaration to the CPP_FNDECLS global variable.
     let mut fndecls = CPP_FNDECLS.lock().unwrap();
     fndecls.insert(fn_ident.name.as_str().to_string(), cpp_decl);
-
-    println!("{}", syntax::print::pprust::expr_to_string(&exp));
 
     // Emit the rust code into the AST
     MacEager::expr(exp)
@@ -392,10 +395,7 @@ fn record_type_data(cx: &Context,
     let mut decls = CPP_FNDECLS.lock().unwrap();
     if let Some(cppfn) = decls.get_mut(name) {
         let ret_ty = expr_ty(cx.tcx, call);
-
         cppfn.ret_ty = Some(type_to_cpp_type(ret_ty));
-
-        println!("{:?} => {:?}", ret_ty, cppfn.ret_ty);
     } else { return }
 
     // We've processed all of them!
@@ -442,11 +442,6 @@ extern "C" {{
     env::set_var("CARGO_MANIFEST_DIR", &out_dir);
     env::set_var("OUT_DIR", &out_dir);
     env::set_var("PROFILE", "");
-
-    println!("starting libs");
-    for lib in &cx.sess().opts.libs {
-        println!("lib: {}", lib.0);
-    }
 
     // Please look away - I'm about to do something truely awful
     unsafe {

@@ -36,10 +36,10 @@ fn basic_math() {
 fn strings() {
     let csvec: Vec<_> = b"Hello, World!".iter().cloned().collect();
     let cs = CString::new(csvec).unwrap();
-    let local_cstring = cs.as_ptr();
+    let mut local_cstring = cs.as_ptr();
 
     let cpp_result = unsafe {
-        cpp!((local_cstring) -> i32 {
+        cpp!((mut local_cstring) -> i32 {
             (*(char**)local_cstring)[3] = 'a';
 
             return 5;
