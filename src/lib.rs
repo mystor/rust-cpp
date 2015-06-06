@@ -18,15 +18,16 @@ use std::env;
 use std::io::prelude::*;
 use std::fs::File;
 use std::ffi::OsString;
+use std::collections::HashMap;
 
 use rustc::plugin::Registry;
 use syntax::parse::token::intern;
 
 use syntax::codemap::Span;
-use syntax::owned_slice::OwnedSlice;
 use syntax::util::small_vector::SmallVector;
 use syntax::abi;
 use syntax::ast::*;
+use syntax::ast_util::empty_generics;
 use syntax::ext::base::{SyntaxExtension, MacResult, ExtCtxt, DummyResult, MacEager};
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{self, InternedString};
@@ -34,12 +35,70 @@ use syntax::ptr::*;
 
 use rustc::lint::*;
 use rustc::session::search_paths::SearchPaths;
+use rustc::middle::ty;
+use rustc::middle::ty::expr_ty;
+use rustc::middle::ty::sty::*;
+
 
 use uuid::Uuid;
 
 lazy_static! {
     static ref CPP_HEADERS: Mutex<String> = Mutex::new(String::new());
-    static ref CPP_FNDECLS: Mutex<String> = Mutex::new(String::new());
+    static ref CPP_FNDECLS: Mutex<HashMap<String, CppFn>> = Mutex::new(HashMap::new());
+}
+
+struct CppParam {
+    mutable: bool,
+    name: String,
+    ty: Option<String>,
+}
+
+impl CppParam {
+    fn to_string(&self) -> String {
+        let mut s = String::new();
+        if !self.mutable {
+            s.push_str("const ");
+        }
+
+        if let Some(ref ty) = self.ty {
+            s.push_str(ty);
+        } else {
+            s.push_str("void");
+        }
+        s.push_str("* ");
+
+        s.push_str(&self.name);
+
+        s
+    }
+}
+
+struct CppFn {
+    name: String,
+    arg_idents: Vec<CppParam>,
+    ret_ty: Option<String>,
+    body: String,
+}
+
+impl CppFn {
+    fn to_string(&self) -> String {
+        // Generate the parameter list
+        let c_params = self.arg_idents.iter().fold(String::new(), |acc, new| {
+            if acc.is_empty() {
+                new.to_string()
+            } else {
+                format!("{}, {}", acc, new.to_string())
+            }
+        });
+
+        let c_ty = if let Some(ref ty) = self.ret_ty {
+            &ty[..]
+        } else {
+            "void"
+        };
+
+        format!("{} {}({}) {}", c_ty, self.name, c_params, self.body)
+    }
 }
 
 #[plugin_registrar]
@@ -179,14 +238,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
             ident: fn_ident.clone(),
             attrs: Vec::new(),
             node: ForeignItemFn(ec.fn_decl(params, ret_ty),
-                                Generics {
-                                    lifetimes: Vec::new(),
-                                    ty_params: OwnedSlice::empty(),
-                                    where_clause: WhereClause {
-                                        id: DUMMY_NODE_ID,
-                                        predicates: Vec::new(),
-                                    }
-                                }),
+                                empty_generics()),
             id: DUMMY_NODE_ID,
             span: mac_span,
             vis: Inherited,
@@ -238,17 +290,20 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                 fn_ident.clone(),
                 args))));
 
-    let c_params = captured_idents.iter().map(|id| {
-        format!("void* {}", id.name.as_str())
-    }).fold(String::new(), |b, e| {
-        if b.is_empty() { e } else { format!("{}, {}", b, e) }
-    });
-
-    let c_decl = format!("int32_t {}({}) {}", fn_ident.name.as_str(), c_params, body_str);
+    let cpp_decl = CppFn {
+        name: format!("{}", fn_ident.name.as_str()),
+        arg_idents: captured_idents.iter().map(|id| CppParam {
+            mutable: false,
+            name: format!("{}", id.name.as_str()),
+            ty: None,
+        }).collect(),
+        ret_ty: None,
+        body: body_str,
+    };
 
     // Add the generated function declaration to the CPP_FNDECLS global variable.
     let mut fndecls = CPP_FNDECLS.lock().unwrap();
-    *fndecls = format!("{}\n{}", *fndecls, c_decl);
+    fndecls.insert(fn_ident.name.as_str().to_string(), cpp_decl);
 
     println!("{}", syntax::print::pprust::expr_to_string(&exp));
 
@@ -291,53 +346,121 @@ impl LintPass for CppLintPass {
         lint_array!()
     }
 
-    fn check_crate(&mut self, cx: &Context, _: &Crate) {
-        // Generate the c++ we want to compile
-        let headers = CPP_HEADERS.lock().unwrap();
-        let fndecls = CPP_FNDECLS.lock().unwrap();
-        let cppcode = format!("/* Headers */{}\n\n/* Function Declarations */\nextern \"C\" {{ {}\n}}",
-                              *headers, *fndecls);
+    fn check_expr(&mut self, cx: &Context, exp: &Expr) {
+        if let ExprCall(ref callee, ref args) = exp.node {
+            if let ExprPath(None, ref path) = callee.node {
+                if path.segments.len() == 1 {
+                    let name = path.segments[0].identifier.name.as_str();
 
-        // Get the output directory, which is _way_ harder than I was expecting,
-        // (also super hacky).
-        let out_dir = super_hack_get_out_dir();
-
-        // Create the C++ file which we will compile
-        {
-            let path = std::path::Path::new(&out_dir).join("rust_cpp_tmp.cpp");
-            let mut f = File::create(path).unwrap();
-            f.write_all(cppcode.as_bytes()).unwrap();
+                    record_type_data(cx, name, exp, args);
+                }
+            }
         }
-
-        // I didn't want to write my own compiler driver-driver, so I'm using gcc.
-        // Unfortuantely, it expects to be run within a cargo build script, so I'm going
-        // to set a bunch of environment variables to trick it into not crashing
-        env::set_var("TARGET", &cx.sess().target.target.llvm_target);
-        env::set_var("HOST", &cx.sess().host.llvm_target);
-        env::set_var("OPT_LEVEL", format!("{}", cx.sess().opts.cg.opt_level.unwrap_or(0)));
-        env::set_var("CARGO_MANIFEST_DIR", &out_dir);
-        env::set_var("OUT_DIR", &out_dir);
-        env::set_var("PROFILE", "");
-
-        println!("starting libs");
-        for lib in &cx.sess().opts.libs {
-            println!("lib: {}", lib.0);
-        }
-
-        // Please look away - I'm about to do something truely awful
-        unsafe {
-            let sp = &cx.sess().opts.search_paths;
-            // OH GOD
-            let sp_mut: &mut SearchPaths = &mut *(sp as *const _ as *mut _);
-
-            sp_mut.add_path(&out_dir.to_str().unwrap());
-        }
-
-        println!("########### Running GCC ###########");
-        gcc::Config::new()
-            .cpp(true)
-            .file("rust_cpp_tmp.cpp")
-            .compile("librust_cpp_tmp.a");
-        println!("########### Done Rust-C++ ############");
     }
+}
+
+fn type_to_cpp_type(ty: ty::Ty) -> String {
+    match ty.sty {
+        ty_bool => format!("int8_t"),
+
+        ty_int(TyIs) => format!("intptr_t"),
+        ty_int(TyI8) => format!("int8_t"),
+        ty_int(TyI16) => format!("int16_t"),
+        ty_int(TyI32) => format!("int32_t"),
+        ty_int(TyI64) => format!("int64_t"),
+
+        ty_uint(TyUs) => format!("uintptr_t"),
+        ty_uint(TyU8) => format!("uint8_t"),
+        ty_uint(TyU16) => format!("uint16_t"),
+        ty_uint(TyU32) => format!("uint32_t"),
+        ty_uint(TyU64) => format!("uint64_t"),
+
+        ty_float(TyF32) => format!("float"),
+        ty_float(TyF64) => format!("double"),
+
+        ty_ptr(..) => format!("void*"),
+        ty_rptr(..) => format!("void*"),
+
+        _ => panic!("Illegal cpp! return type"),
+    }
+}
+
+fn record_type_data(cx: &Context,
+                    name: &str,
+                    call: &Expr,
+                    args: &[P<Expr>]) {
+    let mut decls = CPP_FNDECLS.lock().unwrap();
+    if let Some(cppfn) = decls.get_mut(name) {
+        let ret_ty = expr_ty(cx.tcx, call);
+
+        cppfn.ret_ty = Some(type_to_cpp_type(ret_ty));
+
+        println!("{:?} => {:?}", ret_ty, cppfn.ret_ty);
+    } else { return }
+
+    // We've processed all of them!
+    // Finalize!
+    if decls.values().all(|x| x.ret_ty.is_some()) {
+        finalize(cx, &mut decls);
+    }
+}
+
+fn finalize(cx: &Context, decls: &mut HashMap<String, CppFn>) {
+    // Generate the c++ we want to compile
+    let headers = CPP_HEADERS.lock().unwrap();
+
+    let fndecls = decls.values().fold(String::new(), |acc, new| {
+        format!("{}\n\n{}", acc, new.to_string())
+    });
+
+    let cppcode = format!(r#"
+/* Headers */
+{}
+/* Function Declarations */
+extern "C" {{
+  {}
+}}
+"#, *headers, fndecls);
+
+    // Get the output directory, which is _way_ harder than I was expecting,
+    // (also super hacky).
+    let out_dir = super_hack_get_out_dir();
+
+    // Create the C++ file which we will compile
+    {
+        let path = std::path::Path::new(&out_dir).join("rust_cpp_tmp.cpp");
+        let mut f = File::create(path).unwrap();
+        f.write_all(cppcode.as_bytes()).unwrap();
+    }
+
+    // I didn't want to write my own compiler driver-driver, so I'm using gcc.
+    // Unfortuantely, it expects to be run within a cargo build script, so I'm going
+    // to set a bunch of environment variables to trick it into not crashing
+    env::set_var("TARGET", &cx.sess().target.target.llvm_target);
+    env::set_var("HOST", &cx.sess().host.llvm_target);
+    env::set_var("OPT_LEVEL", format!("{}", cx.sess().opts.cg.opt_level.unwrap_or(0)));
+    env::set_var("CARGO_MANIFEST_DIR", &out_dir);
+    env::set_var("OUT_DIR", &out_dir);
+    env::set_var("PROFILE", "");
+
+    println!("starting libs");
+    for lib in &cx.sess().opts.libs {
+        println!("lib: {}", lib.0);
+    }
+
+    // Please look away - I'm about to do something truely awful
+    unsafe {
+        let sp = &cx.sess().opts.search_paths;
+        // OH GOD
+        let sp_mut: &mut SearchPaths = &mut *(sp as *const _ as *mut _);
+
+        sp_mut.add_path(&out_dir.to_str().unwrap());
+    }
+
+    println!("########### Running GCC ###########");
+    gcc::Config::new()
+        .cpp(true)
+        .file("rust_cpp_tmp.cpp")
+        .compile("librust_cpp_tmp.a");
+    println!("########### Done Rust-C++ ############");
 }
