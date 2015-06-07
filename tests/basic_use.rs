@@ -4,9 +4,7 @@
 
 use std::ffi::CString;
 
-cpp_include!(<iostream>);
-cpp_include!(<cstdint>);
-
+cpp_include!(<cmath>);
 
 #[test]
 fn basic_math() {
@@ -17,8 +15,6 @@ fn basic_math() {
         cpp!((a, b) -> i32 {
             int32_t c = a * 10;
             int32_t d = b * 20;
-
-            std::cout << "Hello from C++!\n";
 
             return c + d;
         })
@@ -63,5 +59,66 @@ fn foreign_type() {
         });
 
         assert_eq!(addr_a, c_addr_a);
+    }
+}
+
+#[test]
+fn slice_arg() {
+    let mut v: Vec<u8> = Vec::new();
+    let mut vs = &v[..];
+    let s = &b"hey_there"[..];
+
+    unsafe {
+        cpp!((mut vs, s) {
+            // Create a new slice object from whole cloth,
+            // and copy it into the old vs object!
+            Slice<uint8_t> new_vs = {
+                .data = s.data,
+                .len = 4,
+            };
+            vs = new_vs;
+        });
+    }
+
+    // vs now holds a reference to the contents of s,
+    // but only the first 4 of them.
+    assert_eq!(vs, b"hey_");
+}
+
+#[test]
+fn slice_return() {
+    let s = &b"hey_there"[..];
+
+    let out = unsafe {
+        cpp!((s) -> *const [u8] {
+            // Create a new slice object from whole cloth,
+            // and copy it into the old vs object!
+            Slice<uint8_t> result = {
+                .data = s.data,
+                .len = 4,
+            };
+
+            return result;
+        })
+    };
+
+    // vs now holds a reference to the contents of s,
+    // but only the first 4 of them.
+    assert_eq!(unsafe { &*out }, b"hey_");
+}
+
+#[test]
+fn c_std_lib() {
+    let num1 = 10.4f32;
+    let num2 = 12.5f32;
+    unsafe {
+        let res = cpp!((num1, num2) -> f32 {
+            return sqrt(num1) + cbrt(num2);
+        });
+
+        let rs_res = num1.sqrt() + num2.cbrt();
+
+        // C and Rust have different float stuff
+        assert!((res - rs_res).abs() < 0.001);
     }
 }
