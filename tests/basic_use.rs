@@ -5,6 +5,7 @@
 use std::ffi::CString;
 
 cpp_include!(<cmath>);
+cpp_include!(<vector>);
 
 #[test]
 fn basic_math() {
@@ -72,7 +73,7 @@ fn slice_arg() {
         cpp!((mut vs, s) {
             // Create a new slice object from whole cloth,
             // and copy it into the old vs object!
-            Slice<uint8_t> new_vs = {
+            rs::Slice<uint8_t> new_vs = {
                 .data = s.data,
                 .len = 4,
             };
@@ -93,7 +94,7 @@ fn slice_return() {
         cpp!((s) -> *const [u8] {
             // Create a new slice object from whole cloth,
             // and copy it into the old vs object!
-            Slice<uint8_t> result = {
+            rs::Slice<uint8_t> result = {
                 .data = s.data,
                 .len = 4,
             };
@@ -122,3 +123,89 @@ fn c_std_lib() {
         assert!((res - rs_res).abs() < 0.001);
     }
 }
+
+#[test]
+fn c_vector() {
+    unsafe {
+        enum CppVec {}
+
+        let cpp_vector = cpp!(() -> *const CppVec {
+            std::vector<uint32_t> *vec = new std::vector<uint32_t>;
+            vec->push_back(10);
+
+            return vec;
+        });
+
+        // Destroy the cpp_vector!
+        let result = cpp!((cpp_vector) -> bool {
+            auto x = (std::vector<uint32_t>*) cpp_vector;
+            uint32_t first_element = (*x)[0];
+            delete x;
+            return first_element == 10;
+        });
+
+        assert!(result);
+    }
+}
+
+fn basic_enum() {
+    #[repr(C)]
+    enum Foo {
+        Apple,
+        Pear,
+        Peach,
+        Cucumber,
+    };
+
+    let foo = Foo::Apple;
+    let bar = Foo::Peach;
+    let quxx = Foo::Cucumber;
+
+    unsafe {
+        let success = cpp!((foo, bar, quxx) -> bool {
+            using namespace rs::basic_enum;
+
+            return foo == Foo::Apple && bar == Foo::Peach && quxx == Foo::Cucumber;
+        });
+
+        assert!(success);
+
+        let returned_enum = cpp!(() -> Foo {
+            using namespace rs::basic_enum;
+
+            return Foo::Cucumber;
+        });
+    }
+}
+
+
+/*
+#[test]
+fn repr_c() {
+    #[derive(PartialEq, Eq, Debug)]
+    #[repr(C)]
+    struct SomeStruct {
+        a: i32,
+        b: i32,
+    }
+
+    let mut my_struct = SomeStruct {
+        a: 5,
+        b: 10
+    };
+
+    unsafe {
+        let retval = cpp!((mut my_struct) -> i32 {
+            int32_t result = my_struct.a + my_struct.b;
+
+            my_struct.a *= 6;
+            my_struct.b *= 6;
+
+            return result;
+        });
+
+        assert_eq!(retval, 15);
+        assert_eq!(my_struct, SomeStruct { a: 30, b: 60 });
+    }
+}
+*/
