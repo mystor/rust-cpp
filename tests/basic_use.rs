@@ -127,6 +127,7 @@ fn c_std_lib() {
 #[test]
 fn c_vector() {
     unsafe {
+        // #[cpp_type("std::vector<uint32_t>")]
         enum CppVec {}
 
         let cpp_vector = cpp!(() -> *const CppVec {
