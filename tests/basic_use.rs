@@ -42,7 +42,9 @@ fn strings() {
 }
 
 #[test]
+#[allow(improper_ctypes)]
 fn foreign_type() {
+    #[allow(dead_code)]
     struct WeirdRustType {
         a: Vec<u8>,
         b: String,
@@ -65,7 +67,7 @@ fn foreign_type() {
 
 #[test]
 fn slice_arg() {
-    let mut v: Vec<u8> = Vec::new();
+    let v: Vec<u8> = Vec::new();
     let mut vs = &v[..];
     let s = &b"hey_there"[..];
 
@@ -149,7 +151,10 @@ fn c_vector() {
     }
 }
 
+#[test]
 fn basic_enum() {
+    #[allow(dead_code)]
+    #[derive(PartialEq, Eq, Debug)]
     #[repr(C)]
     enum Foo {
         Apple,
@@ -176,11 +181,11 @@ fn basic_enum() {
 
             return Foo::Cucumber;
         });
+
+        assert_eq!(returned_enum, Foo::Cucumber);
     }
 }
 
-
-/*
 #[test]
 fn repr_c() {
     #[derive(PartialEq, Eq, Debug)]
@@ -209,4 +214,26 @@ fn repr_c() {
         assert_eq!(my_struct, SomeStruct { a: 30, b: 60 });
     }
 }
-*/
+
+#[test]
+fn repr_c_cycle() {
+    #[repr(C)]
+    struct A {
+        b: *mut B,
+    }
+
+    #[repr(C)]
+    struct B {
+        a: *mut A,
+    }
+
+    let a = A { b: 0 as *mut B };
+
+    unsafe {
+        let retval = cpp!((a) -> *mut B {
+            return a.b;
+        });
+
+        assert_eq!(retval, a.b);
+    }
+}

@@ -64,10 +64,7 @@ impl LintPass for CppLintPass {
     }
 }
 
-fn record_type_data(cx: &Context,
-                    name: &str,
-                    call: &Expr,
-                    args: &[P<Expr>]) {
+fn record_type_data(cx: &Context, name: &str, call: &Expr, args: &[P<Expr>]) {
     let mut headers = CPP_HEADERS.lock().unwrap();
     let mut decls = CPP_FNDECLS.lock().unwrap();
     let mut types = CPP_TYPEDATA.lock().unwrap();
@@ -151,7 +148,7 @@ namespace rs {{
 {}
 
 /* User-generated function declarations */
-extern "C" {{ {} }}
+extern "C" {{{}}}
 "#, *headers, types.to_cpp(), fndecls);
 
     // Get the output directory, which is _way_ harder than I was expecting,

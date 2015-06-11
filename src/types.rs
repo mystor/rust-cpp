@@ -55,6 +55,10 @@ impl TypeData {
                 for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
                 format!("{}\n", defn)
             }
+            (TyState::Nothing, &None, &None) => {
+                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
+                return
+            }
             _ => return,
         };
 
@@ -83,6 +87,11 @@ impl TypeData {
                 for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
                 format!("{}\n", defn)
             }
+            (_, &None, &None) => {
+                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
+                for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
+                return
+            }
             _ => return,
         };
 
@@ -102,8 +111,24 @@ impl TypeData {
         s
     }
 
+    fn maybe_add_type(&mut self, name: &str) -> bool {
+        if self.types.contains_key(name) {
+            return true
+        }
+
+        self.types.insert(name.to_string(), CppTy {
+            decl: None,
+            defn: None,
+            uses_decl: Vec::new(),
+            uses_defn: Vec::new(),
+            state: Cell::new(TyState::Nothing),
+        });
+
+        false
+    }
+
     fn add_type(&mut self, name: String, decl: Option<String>, defn: Option<String>,
-                uses_decl: Vec<String>, uses_defn: Vec<String>) -> String {
+                     uses_decl: Vec<String>, uses_defn: Vec<String>) -> String {
         self.types.insert(name.clone(), CppTy {
             decl: decl,
             defn: defn,
@@ -217,16 +242,19 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                              expr.span, ty) {
                 // If it is a sized type, then the width of the type is the same as a pointer.
                 // So we can treat it like a C++ raw pointer.
-                format!("{}*", try!(cpp_type_of_internal(td, tcx, expr, ty,
-                                                         TypeRestrictions::Pointer)))
+                let cpp_ty = try!(cpp_type_of_internal(td, tcx, expr, ty,
+                                                       TypeRestrictions::Pointer));
+                td.add_type(format!("{}*", &cpp_ty),
+                            None, None, vec![cpp_ty], vec![])
             } else {
                 // It's a trait object or slice!
                 match ty.sty {
                     ty_str => format!("rs::StrSlice"),
                     ty_vec(ref it_ty, None) => {
-                        format!("rs::Slice<{}>",
-                                try!(cpp_type_of_internal(td, tcx, expr, it_ty,
-                                                          TypeRestrictions::Slice)))
+                        let cpp_ty = try!(cpp_type_of_internal(td, tcx, expr, it_ty,
+                                                               TypeRestrictions::Slice));
+                        td.add_type(format!("rs::Slice<{}>", &cpp_ty),
+                                    None, None, vec![cpp_ty], vec![])
                     }
 
                     // Unsized types which aren't slices are trait objects of some type.
@@ -316,7 +344,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             }
         }
 
-        ty_struct(defid, _) => {
+        ty_struct(defid, substs) => {
             let repr_hints = lookup_repr_hints(tcx, defid);
 
             // Ensure that there is exactly 1 item in repr_hints
@@ -332,9 +360,25 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 });
             }
 
-            let mut defn = format!("struct {}", with_path(tcx, defid, |segs| {
+            let name = with_path(tcx, defid, |segs| {
                 segs.last().unwrap()
-            }).name().as_str());
+            }).name();
+            let path = with_path(tcx, defid, |segs| {
+                segs.fold(String::new(), |acc, new| {
+                    if acc.is_empty() {
+                        format!("rs::{}", new.name().as_str())
+                    } else {
+                        format!("{}::{}", acc, new.name().as_str())
+                    }
+                })
+            });
+
+            // Check if this struct has already been declared
+            if td.maybe_add_type(&path) {
+                return Ok(path);
+            }
+
+            let mut defn = format!("struct {}", name.as_str());
             let decl = format!("{};", defn);
 
             // Confirm that the struct is #[repr(C)]
@@ -348,14 +392,20 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 }
             }
 
-            let fields = lookup_struct_fields(tcx, defid);
-
             defn.push_str(" {\n");
+
+            let fields = struct_fields(tcx, defid, substs);
+            let mut defn_reqs = Vec::new();
+            for field{ref name, ref mt} in fields {
+                let ty = try!(cpp_type_of_internal(td, tcx, expr, &mt.ty,
+                                                   TypeRestrictions::ByValue));
+                defn.push_str(&format!("    {} {};\n", &ty, name.as_str()));
+                defn_reqs.push(ty);
+            }
+
             defn.push_str("};");
 
-            return td.void_or_dummy(rest).map_err(|_| {
-                format!("Struct type {} is not ffi safe. Consider annotating it with #[repr(C)].", rs_ty.repr(tcx))
-            });
+            td.add_type(path.clone(), Some(decl), Some(defn), Vec::new(), defn_reqs)
         }
 
         // Unsupported types
