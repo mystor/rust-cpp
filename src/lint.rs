@@ -108,7 +108,7 @@ fn finalize(cx: &Context,
             types: &mut types::TypeData,
             decls: &mut HashMap<String, CppFn>) {
     let fndecls = decls.values().fold(String::new(), |acc, new| {
-        format!("{}\n{}\n", acc, new.to_string())
+        format!("{}\n{}\n", acc, new.to_string(cx.sess()))
     });
 
     let cppcode = format!(r#"

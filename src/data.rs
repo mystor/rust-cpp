@@ -1,6 +1,7 @@
 use types::TypeData;
 
-use syntax::codemap::Span;
+use syntax::codemap::{Span, FileLines};
+use rustc::session::Session;
 
 use std::sync::Mutex;
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ pub struct CppFn {
 }
 
 impl CppFn {
-    pub fn to_string(&self) -> String {
+    pub fn to_string(&self, sess: &Session) -> String {
         // Generate the parameter list
         let c_params = self.arg_idents.iter().fold(String::new(), |acc, new| {
             if acc.is_empty() {
@@ -62,6 +63,17 @@ impl CppFn {
             panic!("Unexpected None ret_ty on CppFn")
         };
 
-        format!("{} {}({}) {}", c_ty, self.name, c_params, self.body)
+        let line = match sess.codemap().span_to_lines(self.span) {
+            Ok(FileLines{file, lines}) => {
+                if lines.len() < 1 {
+                    String::new()
+                } else {
+                    format!("#line {} {:?}", lines[0].line_index + 1, file.name)
+                }
+            }
+            Err(_) => String::new()
+        };
+
+        format!("{}\n{} {}({}) {}", line, c_ty, self.name, c_params, self.body)
     }
 }
