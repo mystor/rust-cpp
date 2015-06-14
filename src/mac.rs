@@ -203,6 +203,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         }).collect(),
         ret_ty: None,
         body: body_str,
+        span: mac_span,
     };
 
     // Add the generated function declaration to the CPP_FNDECLS global variable.

@@ -1,186 +1,262 @@
-use std::collections::HashMap;
-use std::cell::Cell;
+use std::collections::HashSet;
+use std::mem;
 
-use syntax::ast::{self, Expr};
+use syntax::ast::{self, Expr, DefId, NodeId};
 use syntax::ast::IntTy::*;
 use syntax::ast::UintTy::*;
 use syntax::ast::FloatTy::*;
 use syntax::attr::*;
+use syntax::codemap::Span;
 
 use rustc::util::ppaux::Repr;
 use rustc::middle::ty::*;
+use rustc::middle::subst::Substs;
+use rustc::lint::{Context, Level};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TyState {
-    Nothing,
-    Declared,
-    Defined,
+declare_lint!(pub BAD_CXX_TYPE, Warn, "Unable to translate type to C++");
+
+struct DeferredStruct {
+    defid: DefId,
+    nid: (NodeId, Span),
 }
 
-struct CppTy {
-    decl: Option<String>,
-    defn: Option<String>,
+impl DeferredStruct {
+    fn run(self, td: &mut TypeData, tcx: &ctxt) -> TypeName {
+        let (ns_before, ns_after, name, path) = explode_path(tcx, self.defid);
+        let mut tn = TypeName::new(path);
 
-    uses_decl: Vec<String>,
-    uses_defn: Vec<String>,
+        let mut defn = format!("struct {} {{\n", &name);
+        let fields = struct_fields(tcx, self.defid, &Substs::trans_empty());
+        for field{ref name, ref mt} in fields {
+            let ty = cpp_type_of_internal(td, tcx, self.nid, &mt.ty, false);
 
-    state: Cell<TyState>,
+            // Add the field, merging any errors into our TypeName
+            defn.push_str(&format!("    {} {};\n", &tn.merge(ty), &name));
+        }
+        defn.push_str("};");
+
+        // If we have any errors, we shouldn't write out our declaration,
+        // as it won't be valid.
+        if tn.err.len() == 0 {
+            td.decls.push_str(&format!("{}\n{}\n{}", ns_before, defn, ns_after));
+        }
+
+        tn
+    }
 }
 
 pub struct TypeData {
-    types: HashMap<String, CppTy>,
-    dummy_count: usize,
+    decls: String,
+    queue: Vec<DeferredStruct>,
+    declared: HashSet<String>,
 }
 
 impl TypeData {
     pub fn new() -> TypeData {
         TypeData {
-            types: HashMap::new(),
-            dummy_count: 0,
+            decls: String::new(),
+            queue: Vec::new(),
+            declared: HashSet::new(),
         }
     }
 
-    fn gen_decl(&self, buf: &mut String, name: &str) {
-        let ty = if let Some(t) = self.types.get(name) { t } else { return };
+    pub fn to_cpp(&mut self, cx: &Context) -> String {
+        while self.queue.len() != 0 {
+            let mut todo = Vec::new();
+            mem::swap(&mut todo, &mut self.queue);
 
-        let mut cpp = match (ty.state.get(), &ty.decl, &ty.defn) {
-            (TyState::Defined, _, _) => return,
-            (TyState::Nothing, &Some(ref decl), _) => {
-                ty.state.set(TyState::Declared);
-                format!("{}\n", decl)
+            // Run each of the callbacks, and report any errors
+            for cb in todo {
+                let mut tn = cb.run(self, cx.tcx);
+                tn.recover();
+                tn.into_name(cx);
             }
-            (_, &None, &Some(ref defn)) => {
-                ty.state.set(TyState::Defined);
-                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
-                for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
-                format!("{}\n", defn)
-            }
-            (TyState::Nothing, &None, &None) => {
-                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
-                return
-            }
-            _ => return,
-        };
-
-        // Wrap the decl in namespaces, such that the namespace is correct
-        let mut segs = name.rsplit("::");
-        segs.next();
-        for seg in segs {
-            cpp = format!("namespace {} {{\n{}}}\n", seg, cpp);
         }
+        // XXX Process queue here
+        self.decls.clone()
+    }
+}
 
-        buf.push_str(&cpp);
+#[derive(Debug, Clone)]
+struct TypeNameNote {
+    msg: String,
+    span: Option<Span>,
+}
+
+#[derive(Debug, Clone)]
+struct TypeNameProblem {
+    msg: String,
+    span: Option<Span>,
+    notes: Vec<TypeNameNote>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeName {
+    name: String,
+    warn: Vec<TypeNameProblem>,
+    err: Vec<TypeNameProblem>,
+}
+
+impl TypeName {
+    fn new(s: String) -> TypeName {
+        TypeName {
+            name: s,
+            warn: Vec::new(),
+            err: Vec::new(),
+        }
     }
 
-    fn gen_defn(&self, buf: &mut String, name: &str) {
-        let ty = if let Some(t) = self.types.get(name) { t } else { return };
-
-        let mut cpp = match (ty.state.get(), &ty.decl, &ty.defn) {
-            (TyState::Defined, _, _) => return,
-            (TyState::Nothing, &Some(ref decl), &None) => {
-                ty.state.set(TyState::Defined);
-                format!("{}\n", decl)
-            }
-            (_, _, &Some(ref defn)) => {
-                ty.state.set(TyState::Defined);
-                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
-                for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
-                format!("{}\n", defn)
-            }
-            (_, &None, &None) => {
-                for ty in &ty.uses_decl { self.gen_decl(buf, ty); }
-                for ty in &ty.uses_defn { self.gen_defn(buf, ty); }
-                return
-            }
-            _ => return,
-        };
-
-        // Wrap the defn in namespaces, such that the namespace is correct
-        let mut segs = name.rsplit("::");
-        segs.next();
-        for seg in segs {
-            cpp = format!("namespace {} {{\n{}}}\n", seg, cpp);
-        }
-
-        buf.push_str(&cpp);
+    fn from_str(s: &str) -> TypeName {
+        TypeName::new(format!("{}", s))
     }
 
-    pub fn to_cpp(&self) -> String {
-        let mut s = String::new();
-        for name in self.types.keys() { self.gen_defn(&mut s, name); }
-        s
+    fn error(err: String, span: Option<Span>) -> TypeName {
+        TypeName {
+            name: format!("rs::__Dummy"),
+            warn: Vec::new(),
+            err: vec![TypeNameProblem {
+                msg: err,
+                span: span,
+                notes: Vec::new(),
+            }],
+        }
     }
 
-    fn maybe_add_type(&mut self, name: &str) -> bool {
-        if self.types.contains_key(name) {
-            return true
+    pub fn into_name(self, cx: &Context) -> String {
+        if self.err.len() == 0 {
+            for warn in &self.warn {
+                if cx.current_level(BAD_CXX_TYPE) != Level::Allow {
+                    if let Some(span) = warn.span {
+                        cx.span_lint(BAD_CXX_TYPE, span, &warn.msg);
+                    } else {
+                        cx.lint(BAD_CXX_TYPE, &warn.msg);
+                    }
+
+                    cx.sess().note("C++ code will recieve an opaque reference");
+
+                    for note in &warn.notes {
+                        if let Some(span) = note.span {
+                            cx.sess().span_note(span, &note.msg);
+                        } else {
+                            cx.sess().note(&note.msg);
+                        }
+                    }
+                }
+            }
+        } else {
+            for err in &self.err {
+                if let Some(span) = err.span {
+                    cx.sess().span_err(span, &err.msg);
+                } else {
+                    cx.sess().err(&err.msg);
+                }
+
+                cx.sess().note("This type can't be passed by value, and thus \
+                                is an invalid return type");
+
+                for note in &err.notes {
+                    if let Some(span) = note.span {
+                        cx.sess().span_note(span, &note.msg);
+                    } else {
+                        cx.sess().note(&note.msg);
+                    }
+                }
+            }
+
+            // Don't bother reporting warnings if we are going to fail
+            // Just report the errors
         }
 
-        self.types.insert(name.to_string(), CppTy {
-            decl: None,
-            defn: None,
-            uses_decl: Vec::new(),
-            uses_defn: Vec::new(),
-            state: Cell::new(TyState::Nothing),
+        self.name
+    }
+
+    pub fn with_note(mut self, msg: String, span: Option<Span>) -> TypeName {
+        for warn in &mut self.warn {
+            warn.notes.push(TypeNameNote {
+                msg: msg.clone(),
+                span: span,
+            });
+        }
+        for err in &mut self.err {
+            err.notes.push(TypeNameNote {
+                msg: msg.clone(),
+                span: span,
+            });
+        }
+        self
+    }
+
+    pub fn with_warn(mut self, msg: String, span: Option<Span>) -> TypeName {
+        self.warn.push(TypeNameProblem {
+            msg: msg,
+            span: span,
+            notes: Vec::new(),
         });
-
-        false
+        self
     }
 
-    fn add_type(&mut self, name: String, decl: Option<String>, defn: Option<String>,
-                     uses_decl: Vec<String>, uses_defn: Vec<String>) -> String {
-        self.types.insert(name.clone(), CppTy {
-            decl: decl,
-            defn: defn,
-            uses_decl: uses_decl,
-            uses_defn: uses_defn,
-            state: Cell::new(TyState::Nothing),
-        });
+    pub fn with_name(mut self, name: String) -> TypeName {
+        self.name = name;
+        self
+    }
+
+    pub fn map_name<F>(self, f: F) -> TypeName where F: FnOnce(String) -> String {
+        let TypeName{ name, warn, err } = self;
+        let name = f(name);
+        TypeName{ name: name, warn: warn, err: err }
+    }
+
+    pub fn merge(&mut self, other: TypeName) -> String {
+        let TypeName{ name, warn, err } = other;
+
+        for it in warn { self.warn.push(it) }
+        for it in err { self.err.push(it) }
         name
     }
 
-    fn void_or_dummy<'tcx>(&mut self, rest: TypeRestrictions) -> Result<String, ()> {
-        if rest.can_be_void() {
-            Ok(format!("void"))
-        } else if rest.incomplete_type_ok() {
-            let name = format!("__DummyType_{}", self.dummy_count);
-            self.dummy_count += 1;
+    /// This method is called when it is possible to require from
+    /// typename generation problems. If there are any errors,
+    /// they are converted into warnings, and true is returned.
+    /// otherwise, false is returned.
+    pub fn recover(&mut self) -> bool {
+        if self.err.len() == 0 { return false }
 
-            Ok(self.add_type(format!("rs::{}", &name),
-                             Some(format!("class {};", &name)),
-                             None, Vec::new(), Vec::new()))
-        } else {
-            Err(())
+        let mut err = Vec::new();
+        mem::swap(&mut self.err, &mut err);
+        for e in err {
+            self.warn.push(e);
         }
+
+        true
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
-enum TypeRestrictions {
-    Pointer,
-    Reference,
-    ByValue,
-    Slice,
-}
+/// Takes the defid of a struct or enum, and produces useful strings for generating the C++ code
+/// the results are as follows:
+/// ns_before: The `namespace foo {` declarations which should be placed before the declaration
+/// ns_after: The `}` declarations which should be placed after the declaration
+/// name: The name of the struct or enum itself
+/// path: The fully qualified path in C++ which the struct/enum should exist at
+fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
+    let mut ns_before = String::new();
+    let mut ns_after = String::new();
+    let mut name = String::new();
+    let mut path = format!("::rs::");
 
-impl TypeRestrictions {
-    fn can_be_void(&self) -> bool {
-        use self::TypeRestrictions::*;
-        match *self {
-            Pointer | Slice => true,
-            Reference | ByValue => false,
+    with_path(tcx, defid, |segs| {
+        let mut segs_vec: Vec<_> = segs.map(|x| x.name()).collect();
+
+        name = format!("{}", segs_vec.pop().unwrap().as_str());
+        for seg in segs_vec {
+            ns_before.push_str(&format!("namespace {} {{\n", seg.as_str()));
+            ns_after.push_str("}\n");
+            path.push_str(&format!("{}::", seg.as_str()));
         }
-    }
+        path.push_str(&name);
+    });
 
-    fn incomplete_type_ok(&self) -> bool {
-        use self::TypeRestrictions::*;
-        match *self {
-            Pointer | Slice | Reference => true,
-            ByValue => false,
-        }
-    }
+    (ns_before, ns_after, name, path)
 }
-
 
 /// Determine the c++ type for a given expression
 /// This is the entry point for the types module, and is the intended mechanism for
@@ -188,7 +264,7 @@ impl TypeRestrictions {
 pub fn cpp_type_of<'tcx>(td: &mut TypeData,
                          tcx: &ctxt<'tcx>,
                          expr: &Expr,
-                         is_arg: bool) -> Result<String, String> {
+                         is_arg: bool) -> TypeName {
     // Get the type object
     let rs_ty = expr_ty(tcx, expr);
 
@@ -196,71 +272,78 @@ pub fn cpp_type_of<'tcx>(td: &mut TypeData,
         // Special case for void return value
         if let ty_tup(ref it) = rs_ty.sty {
             if it.len() == 0 {
-                return Ok(format!("void"));
+                return TypeName::from_str("void");
             }
         }
     }
 
-    let restrictions = if is_arg {
-        TypeRestrictions::Reference
-    } else {
-        TypeRestrictions::ByValue
-    };
-
-    cpp_type_of_internal(td, tcx, expr, rs_ty, restrictions)
+    cpp_type_of_internal(td, tcx, (expr.id, expr.span), rs_ty, is_arg)
 }
 
 fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                               tcx: &ctxt<'tcx>,
-                              expr: &Expr,
+                              nid: (NodeId, Span),
                               rs_ty: Ty<'tcx>,
-                              rest: TypeRestrictions) -> Result<String, String> {
-    Ok(match rs_ty.sty {
-        ty_bool => format!("int8_t"),
+                              in_ptr: bool) -> TypeName {
+    match rs_ty.sty {
+        ty_bool => TypeName::from_str("int8_t"),
 
-        ty_int(TyIs) => format!("intptr_t"),
-        ty_int(TyI8) => format!("int8_t"),
-        ty_int(TyI16) => format!("int16_t"),
-        ty_int(TyI32) => format!("int32_t"),
-        ty_int(TyI64) => format!("int64_t"),
+        ty_int(TyIs) => TypeName::from_str("intptr_t"),
+        ty_int(TyI8) => TypeName::from_str("int8_t"),
+        ty_int(TyI16) => TypeName::from_str("int16_t"),
+        ty_int(TyI32) => TypeName::from_str("int32_t"),
+        ty_int(TyI64) => TypeName::from_str("int64_t"),
 
-        ty_uint(TyUs) => format!("uintptr_t"),
-        ty_uint(TyU8) => format!("uint8_t"),
-        ty_uint(TyU16) => format!("uint16_t"),
-        ty_uint(TyU32) => format!("uint32_t"),
-        ty_uint(TyU64) => format!("uint64_t"),
+        ty_uint(TyUs) => TypeName::from_str("uintptr_t"),
+        ty_uint(TyU8) => TypeName::from_str("uint8_t"),
+        ty_uint(TyU16) => TypeName::from_str("uint16_t"),
+        ty_uint(TyU32) => TypeName::from_str("uint32_t"),
+        ty_uint(TyU64) => TypeName::from_str("uint64_t"),
 
-        ty_float(TyF32) => format!("float"),
-        ty_float(TyF64) => format!("double"),
+        ty_float(TyF32) => TypeName::from_str("float"),
+        ty_float(TyF64) => TypeName::from_str("double"),
 
         ty_ptr(mt { ref ty, .. }) |
         ty_rptr(_, mt { ref ty, .. }) |
         ty_uniq(ref ty) => {
             // We need to know if the type is Sized.
             // !Sized pointers are twice as wide as Sized pointers.
-            if type_is_sized(&ParameterEnvironment::for_item(tcx, expr.id),
-                             expr.span, ty) {
-                // If it is a sized type, then the width of the type is the same as a pointer.
-                // So we can treat it like a C++ raw pointer.
-                let cpp_ty = try!(cpp_type_of_internal(td, tcx, expr, ty,
-                                                       TypeRestrictions::Pointer));
-                td.add_type(format!("{}*", &cpp_ty),
-                            None, None, vec![cpp_ty], vec![])
+            if type_is_sized(&ParameterEnvironment::for_item(tcx, nid.0),
+                             nid.1, ty) {
+
+                // We try to get the internal type - if that doesn't work out it's OK
+                let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, ty, true);
+
+                // If we had a problem generating the type, make the errors warnings,
+                // and emit the type void*
+                if cpp_ty.recover() {
+                    cpp_ty.with_name(format!("void*"))
+                } else {
+                    cpp_ty.map_name(|name| format!("{}*", &name))
+                }
             } else {
                 // It's a trait object or slice!
                 match ty.sty {
-                    ty_str => format!("rs::StrSlice"),
+                    ty_str => TypeName::from_str("rs::StrSlice"),
                     ty_vec(ref it_ty, None) => {
-                        let cpp_ty = try!(cpp_type_of_internal(td, tcx, expr, it_ty,
-                                                               TypeRestrictions::Slice));
-                        td.add_type(format!("rs::Slice<{}>", &cpp_ty),
-                                    None, None, vec![cpp_ty], vec![])
+                        let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, it_ty, true);
+
+                        if cpp_ty.recover() {
+                            cpp_ty.with_name(format!("rs::Slice<void>"))
+                        } else {
+                            cpp_ty.map_name(|name| format!("rs::Slice<{}>", &name))
+                        }
                     }
 
                     // Unsized types which aren't slices are trait objects of some type.
                     // We don't want to go out of our way to support them,
                     // but we return the correct width of pointer to keep layout correct.
-                    _ => format!("rs::TraitObject"),
+                    _ => {
+                        TypeName::from_str("rs::TraitObject")
+                            .with_warn(format!("Type {} is an unsized type which cannot \
+                                                currently be translated to C++", ty.repr(tcx)),
+                                       None)
+                    },
                 }
             }
         }
@@ -271,20 +354,19 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
 
                 // Ensure that there is exactly 1 item in repr_hints
                 if repr_hints.len() == 0 {
-                    return td.void_or_dummy(rest).map_err(|_| {
-                        format!("Enum type {} does not have a #[repr(_)] annotation. \
-                                 Consider annotating it with #[repr(C)].", rs_ty.repr(tcx))
-                    });
+                    return TypeName::error(format!("Enum type {} does not have a #[repr(_)] annotation.",
+                                                   rs_ty.repr(tcx)), None)
+                        .with_note(format!("Consider annotating it with #[repr(C)]"), None);
                 } else if repr_hints.len() > 1 {
-                    return td.void_or_dummy(rest).map_err(|_| {
-                        format!("Enum type {} has multiple #[repr(_)] annotations.",
-                                rs_ty.repr(tcx))
-                    });
+                    return TypeName::error(format!("Enum type {} has multiple #[repr(_)] annotations",
+                                                   rs_ty.repr(tcx)), None);
                 }
 
-                let mut defn = format!("enum class {}", with_path(tcx, defid, |segs| {
-                    segs.last().unwrap()
-                }).name().as_str());
+                let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
+                let tn = TypeName::new(path);
+                if td.declared.contains(&name) { return tn; }
+
+                let mut defn = format!("enum class {}", &name);
 
                 // Determine the representation of the enum class
                 match repr_hints[0] {
@@ -309,111 +391,76 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                         defn.push_str(&format!(" : {}", repr));
                     }
                     _ => {
-                        return td.void_or_dummy(rest).map_err(|_| {
-                            format!("Enum type {} has an unsupported #[repr(_)] annotation",
-                                    rs_ty.repr(tcx))
-                        });
+                        return TypeName::error(format!("Enum type {} has unsupported #[repr(_)] annotation",
+                                                       rs_ty.repr(tcx)), None);
                     }
                 }
 
                 defn.push_str(" {\n");
-
                 let variants = enum_variants(tcx, defid);
                 for variant in &*variants {
                     defn.push_str(&format!("    {} = {},\n",
                                            variant.name.as_str(), variant.disr_val));
                 }
-
                 defn.push_str("};");
 
-                let name = with_path(tcx, defid, |segs| {
-                    segs.fold(String::new(), |acc, new| {
-                        if acc.is_empty() {
-                            format!("rs::{}", new)
-                        } else {
-                            format!("{}::{}", acc, new)
-                        }
-                    })
-                });
-
-                td.add_type(name, None, Some(defn), Vec::new(), Vec::new())
+                // Record the declaration, and define the type
+                td.decls.push_str(&format!("{}\n{}\n{}", ns_before, defn, ns_after));
+                td.declared.insert(name);
+                tn
             } else {
-                return td.void_or_dummy(rest).map_err(|_| {
-                    format!("Non C-like enum types like {} are not supported", rs_ty.repr(tcx))
-                });
+                TypeName::error(format!("Enum type {} is not a C-like enum", rs_ty.repr(tcx)), None)
             }
         }
 
         ty_struct(defid, substs) => {
             let repr_hints = lookup_repr_hints(tcx, defid);
 
-            // Ensure that there is exactly 1 item in repr_hints
+            // Ensure that there is exactly 1 item in repr_hints, and that it is #[repr(C)]
             if repr_hints.len() == 0 {
-                return td.void_or_dummy(rest).map_err(|_| {
-                    format!("Struct type {} does not have a #[repr(_)] annotation. \
-                             Consider annotating it with #[repr(C)].", rs_ty.repr(tcx))
-                });
+                return TypeName::error(format!("Struct type {} does not have a #[repr(_)] annotation",
+                                               rs_ty.repr(tcx)), None)
+                    .with_note(format!("Consider annotating it with #[repr(C)]"), None);
             } else if repr_hints.len() > 1 {
-                return td.void_or_dummy(rest).map_err(|_| {
-                    format!("Struct type {} has multiple #[repr(_)] annotations.",
-                            rs_ty.repr(tcx))
-                });
+                return TypeName::error(format!("Struct type {} has multiple #[repr(_)] annotations",
+                                               rs_ty.repr(tcx)), None);
+            } else if repr_hints[0] != ReprExtern {
+                return TypeName::error(format!("Struct type {} has an unsupported #[repr(_)] annotation",
+                                               rs_ty.repr(tcx)), None);
             }
 
-            let name = with_path(tcx, defid, |segs| {
-                segs.last().unwrap()
-            }).name();
-            let path = with_path(tcx, defid, |segs| {
-                segs.fold(String::new(), |acc, new| {
-                    if acc.is_empty() {
-                        format!("rs::{}", new.name().as_str())
-                    } else {
-                        format!("{}::{}", acc, new.name().as_str())
-                    }
-                })
-            });
-
-            // Check if this struct has already been declared
-            if td.maybe_add_type(&path) {
-                return Ok(path);
+            // We don't support structs with substitutions (generic type parameters)
+            if !substs.types.is_empty() {
+                return TypeName::error(format!("Struct type {} has generic type parameters, \
+                                                which are not supported",
+                                               rs_ty.repr(tcx)), None);
             }
 
-            let mut defn = format!("struct {}", name.as_str());
-            let decl = format!("{};", defn);
+            let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
+            let tn = TypeName::new(path);
+            if td.declared.contains(&name) { return tn; }
 
-            // Confirm that the struct is #[repr(C)]
-            match repr_hints[0] {
-                ReprExtern => {}
-                _ => {
-                    return td.void_or_dummy(rest).map_err(|_| {
-                        format!("Struct type {} has an unsupported #[repr(_)] annotation",
-                                rs_ty.repr(tcx))
-                    });
-                }
+            let deferred = DeferredStruct {
+                defid: defid,
+                nid: nid,
+            };
+
+            if in_ptr {
+                td.decls.push_str(&format!("{}\nstruct {};\n{}",
+                                           ns_before, &name, ns_after));
+                td.queue.push(deferred);
+            } else {
+                deferred.run(td, tcx);
             }
 
-            defn.push_str(" {\n");
-
-            let fields = struct_fields(tcx, defid, substs);
-            let mut defn_reqs = Vec::new();
-            for field{ref name, ref mt} in fields {
-                let ty = try!(cpp_type_of_internal(td, tcx, expr, &mt.ty,
-                                                   TypeRestrictions::ByValue));
-                defn.push_str(&format!("    {} {};\n", &ty, name.as_str()));
-                defn_reqs.push(ty);
-            }
-
-            defn.push_str("};");
-
-            td.add_type(path.clone(), Some(decl), Some(defn), Vec::new(), defn_reqs)
+            td.declared.insert(name);
+            tn
         }
 
         // Unsupported types
         _ => {
-            return td.void_or_dummy(rest).map_err(|_| {
-                format!("Passing types like {} by-value between C++ and rust is not supported",
-                        rs_ty.repr(tcx))
-            });
+            TypeName::error(format!("The type {} cannot be passed between C++ and rust",
+                                    rs_ty.repr(tcx)), None)
         }
-    })
+    }
 }

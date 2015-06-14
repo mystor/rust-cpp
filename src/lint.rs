@@ -48,7 +48,7 @@ fn super_hack_get_out_dir() -> OsString {
 pub struct CppLintPass;
 impl LintPass for CppLintPass {
     fn get_lints(&self) -> LintArray {
-        lint_array!()
+        lint_array!(types::BAD_CXX_TYPE)
     }
 
     fn check_expr(&mut self, cx: &Context, exp: &Expr) {
@@ -70,24 +70,21 @@ fn record_type_data(cx: &Context, name: &str, call: &Expr, args: &[P<Expr>]) {
     let mut types = CPP_TYPEDATA.lock().unwrap();
 
     if let Some(cppfn) = decls.get_mut(name) {
-        match types::cpp_type_of(&mut types, cx.tcx, call, false) {
-            Ok(ty) => cppfn.ret_ty = Some(ty),
-
-            // XXX FIXME => this shouldn't panic
-            Err(reason) => panic!("Invalid return type: {}", reason),
-        }
+        cppfn.ret_ty = Some(types::cpp_type_of(&mut types, cx.tcx, call, false)
+                            .with_note(format!("Used in the return value of this cpp! block"),
+                                       Some(cppfn.span))
+                            .into_name(cx));
 
         for (i, arg) in args.iter().enumerate() {
             // Strip the two casts off
             if let ExprCast(ref e, _) = arg.node {
                 if let ExprCast(ref e, _) = e.node {
                     if let ExprAddrOf(_, ref e) = e.node {
-                        match types::cpp_type_of(&mut types, cx.tcx, e, true) {
-                            Ok(ty) => cppfn.arg_idents[i].ty = Some(ty),
-
-                            // XXX FIXME => this shouldn't panic
-                            Err(reason) => panic!("Invalid arg type: {}", reason),
-                        }
+                        let mut tn = types::cpp_type_of(&mut types, cx.tcx, e, true)
+                            .with_note(format!("Used in the argument `{}` of this cpp! block",
+                                               cppfn.arg_idents[i].name), Some(cppfn.span));
+                        tn.recover(); // We are in a reference, so we shouldn't error
+                        cppfn.arg_idents[i].ty = Some(tn.into_name(cx));
 
                         continue
                     }
@@ -101,6 +98,7 @@ fn record_type_data(cx: &Context, name: &str, call: &Expr, args: &[P<Expr>]) {
     // We've processed all of them!
     // Finalize!
     if decls.values().all(|x| x.ret_ty.is_some()) {
+        cx.sess().abort_if_errors();
         finalize(cx, &mut headers, &mut types, &mut decls);
     }
 }
@@ -139,17 +137,24 @@ namespace rs {{
         void* data;
         void* vtable;
     }};
+
+    /* A dummy struct which is generated when incompatible types are closed-over */
+    struct __Dummy;
 }}
 
 /* User-generated Headers */
 {}
 
 /* Generated types */
+namespace rs {{
+
 {}
+
+}} // namespace rs
 
 /* User-generated function declarations */
 extern "C" {{{}}}
-"#, *headers, types.to_cpp(), fndecls);
+"#, *headers, types.to_cpp(cx), fndecls);
 
     // Get the output directory, which is _way_ harder than I was expecting,
     // (also super hacky).

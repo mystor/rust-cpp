@@ -1,5 +1,7 @@
 use types::TypeData;
 
+use syntax::codemap::Span;
+
 use std::sync::Mutex;
 use std::collections::HashMap;
 
@@ -40,6 +42,7 @@ pub struct CppFn {
     pub arg_idents: Vec<CppParam>,
     pub ret_ty: Option<String>,
     pub body: String,
+    pub span: Span,
 }
 
 impl CppFn {
