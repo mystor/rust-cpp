@@ -140,6 +140,29 @@ namespace rs {{
 
     /* A dummy struct which is generated when incompatible types are closed-over */
     struct __Dummy;
+
+
+    /* Typedefs for integral and floating point types */
+    typedef uint8_t u8;
+    typedef uint16_t u16;
+    typedef uint32_t u32;
+    typedef uint64_t u64;
+    typedef {} usize;
+
+    typedef int8_t i8;
+    typedef int16_t i16;
+    typedef int32_t i32;
+    typedef int64_t i64;
+    typedef {} isize;
+
+    typedef float f32;
+    static_assert(sizeof(f32) == 4, "C++ `float` isn't 32 bits wide");
+
+    typedef double f64;
+    static_assert(sizeof(f64) == 8, "C++ `double` isn't 64 bits wide");
+
+    /* We use this bool type to ensure that our bools are 1 byte wide */
+    typedef i8 bool_;
 }}
 
 /* User-generated Headers */
@@ -154,7 +177,7 @@ namespace rs {{
 
 /* User-generated function declarations */
 extern "C" {{{}}}
-"#, *headers, types.to_cpp(cx), fndecls);
+"#, cx.sess().target.uint_type, cx.sess().target.int_type, *headers, types.to_cpp(cx), fndecls);
 
     // Get the output directory, which is _way_ harder than I was expecting,
     // (also super hacky).

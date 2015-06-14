@@ -248,7 +248,7 @@ fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
 
         name = format!("{}", segs_vec.pop().unwrap().as_str());
         for seg in segs_vec {
-            ns_before.push_str(&format!("namespace {} {{\n", seg.as_str()));
+            ns_before.push_str(&format!("namespace {} {{", seg.as_str()));
             ns_after.push_str("}\n");
             path.push_str(&format!("{}::", seg.as_str()));
         }
@@ -286,22 +286,22 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                               rs_ty: Ty<'tcx>,
                               in_ptr: bool) -> TypeName {
     match rs_ty.sty {
-        ty_bool => TypeName::from_str("int8_t"),
+        ty_bool => TypeName::from_str("::rs::bool_"),
 
-        ty_int(TyIs) => TypeName::from_str("intptr_t"),
-        ty_int(TyI8) => TypeName::from_str("int8_t"),
-        ty_int(TyI16) => TypeName::from_str("int16_t"),
-        ty_int(TyI32) => TypeName::from_str("int32_t"),
-        ty_int(TyI64) => TypeName::from_str("int64_t"),
+        ty_int(TyIs) => TypeName::from_str("::rs::isize"),
+        ty_int(TyI8) => TypeName::from_str("::rs::i8"),
+        ty_int(TyI16) => TypeName::from_str("::rs::i16"),
+        ty_int(TyI32) => TypeName::from_str("::rs::i32"),
+        ty_int(TyI64) => TypeName::from_str("::rs::i64"),
 
-        ty_uint(TyUs) => TypeName::from_str("uintptr_t"),
-        ty_uint(TyU8) => TypeName::from_str("uint8_t"),
-        ty_uint(TyU16) => TypeName::from_str("uint16_t"),
-        ty_uint(TyU32) => TypeName::from_str("uint32_t"),
-        ty_uint(TyU64) => TypeName::from_str("uint64_t"),
+        ty_uint(TyUs) => TypeName::from_str("::rs::usize"),
+        ty_uint(TyU8) => TypeName::from_str("::rs::u8"),
+        ty_uint(TyU16) => TypeName::from_str("::rs::u16"),
+        ty_uint(TyU32) => TypeName::from_str("::rs::u32"),
+        ty_uint(TyU64) => TypeName::from_str("::rs::u64"),
 
-        ty_float(TyF32) => TypeName::from_str("float"),
-        ty_float(TyF64) => TypeName::from_str("double"),
+        ty_float(TyF32) => TypeName::from_str("::rs::f32"),
+        ty_float(TyF64) => TypeName::from_str("::rs::f64"),
 
         ty_ptr(mt { ref ty, .. }) |
         ty_rptr(_, mt { ref ty, .. }) |
@@ -324,14 +324,14 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             } else {
                 // It's a trait object or slice!
                 match ty.sty {
-                    ty_str => TypeName::from_str("rs::StrSlice"),
+                    ty_str => TypeName::from_str("::rs::StrSlice"),
                     ty_vec(ref it_ty, None) => {
                         let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, it_ty, true);
 
                         if cpp_ty.recover() {
-                            cpp_ty.with_name(format!("rs::Slice<void>"))
+                            cpp_ty.with_name(format!("::rs::Slice<void>"))
                         } else {
-                            cpp_ty.map_name(|name| format!("rs::Slice<{}>", &name))
+                            cpp_ty.map_name(|name| format!("::rs::Slice<{}>", &name))
                         }
                     }
 
@@ -339,7 +339,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     // We don't want to go out of our way to support them,
                     // but we return the correct width of pointer to keep layout correct.
                     _ => {
-                        TypeName::from_str("rs::TraitObject")
+                        TypeName::from_str("::rs::TraitObject")
                             .with_warn(format!("Type {} is an unsized type which cannot \
                                                 currently be translated to C++", ty.repr(tcx)),
                                        None)
@@ -376,16 +376,16 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     ReprInt(_, ity) => {
                         // #[repr(int_type)] => representation is the int_type!
                         let repr = match ity {
-                            SignedInt(ast::TyI8) => "int8_t",
-                            UnsignedInt(ast::TyU8) => "uint8_t",
-                            SignedInt(ast::TyI16) => "int16_t",
-                            UnsignedInt(ast::TyU16) => "uint16_t",
-                            SignedInt(ast::TyI32) => "int32_t",
-                            UnsignedInt(ast::TyU32) => "uint32_t",
-                            SignedInt(ast::TyI64) => "int64_t",
-                            UnsignedInt(ast::TyU64) => "uint64_t",
-                            SignedInt(ast::TyIs) => "intptr_t",
-                            UnsignedInt(ast::TyUs) => "uintptr_t",
+                            SignedInt(ast::TyI8) => "::rs::i8",
+                            UnsignedInt(ast::TyU8) => "::rs::u8",
+                            SignedInt(ast::TyI16) => "::rs::i16",
+                            UnsignedInt(ast::TyU16) => "::rs::u16",
+                            SignedInt(ast::TyI32) => "::rs::i32",
+                            UnsignedInt(ast::TyU32) => "::rs::u32",
+                            SignedInt(ast::TyI64) => "::rs::i64",
+                            UnsignedInt(ast::TyU64) => "::rs::u64",
+                            SignedInt(ast::TyIs) => "::rs::isize",
+                            UnsignedInt(ast::TyUs) => "::rs::usize",
                         };
 
                         defn.push_str(&format!(" : {}", repr));
