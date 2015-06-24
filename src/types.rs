@@ -8,7 +8,6 @@ use syntax::ast::FloatTy::*;
 use syntax::attr::*;
 use syntax::codemap::Span;
 
-use rustc::util::ppaux::Repr;
 use rustc::middle::ty::*;
 use rustc::middle::subst::Substs;
 use rustc::lint::{Context, Level};
@@ -270,7 +269,7 @@ pub fn cpp_type_of<'tcx>(td: &mut TypeData,
 
     if !is_arg {
         // Special case for void return value
-        if let ty_tup(ref it) = rs_ty.sty {
+        if let TyTuple(ref it) = rs_ty.sty {
             if it.len() == 0 {
                 return TypeName::from_str("void");
             }
@@ -286,30 +285,30 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                               rs_ty: Ty<'tcx>,
                               in_ptr: bool) -> TypeName {
     match rs_ty.sty {
-        ty_bool => TypeName::from_str("::rs::bool_"),
+        TyBool => TypeName::from_str("::rs::bool_"),
 
-        ty_int(TyIs) => TypeName::from_str("::rs::isize"),
-        ty_int(TyI8) => TypeName::from_str("::rs::i8"),
-        ty_int(TyI16) => TypeName::from_str("::rs::i16"),
-        ty_int(TyI32) => TypeName::from_str("::rs::i32"),
-        ty_int(TyI64) => TypeName::from_str("::rs::i64"),
+        TyInt(TyIs) => TypeName::from_str("::rs::isize"),
+        TyInt(TyI8) => TypeName::from_str("::rs::i8"),
+        TyInt(TyI16) => TypeName::from_str("::rs::i16"),
+        TyInt(TyI32) => TypeName::from_str("::rs::i32"),
+        TyInt(TyI64) => TypeName::from_str("::rs::i64"),
 
-        ty_uint(TyUs) => TypeName::from_str("::rs::usize"),
-        ty_uint(TyU8) => TypeName::from_str("::rs::u8"),
-        ty_uint(TyU16) => TypeName::from_str("::rs::u16"),
-        ty_uint(TyU32) => TypeName::from_str("::rs::u32"),
-        ty_uint(TyU64) => TypeName::from_str("::rs::u64"),
+        TyUint(TyUs) => TypeName::from_str("::rs::usize"),
+        TyUint(TyU8) => TypeName::from_str("::rs::u8"),
+        TyUint(TyU16) => TypeName::from_str("::rs::u16"),
+        TyUint(TyU32) => TypeName::from_str("::rs::u32"),
+        TyUint(TyU64) => TypeName::from_str("::rs::u64"),
 
-        ty_float(TyF32) => TypeName::from_str("::rs::f32"),
-        ty_float(TyF64) => TypeName::from_str("::rs::f64"),
+        TyFloat(TyF32) => TypeName::from_str("::rs::f32"),
+        TyFloat(TyF64) => TypeName::from_str("::rs::f64"),
 
-        ty_ptr(mt { ref ty, .. }) |
-        ty_rptr(_, mt { ref ty, .. }) |
-        ty_uniq(ref ty) => {
+        TyRawPtr(mt { ref ty, .. }) |
+        TyRef(_, mt { ref ty, .. }) |
+        TyBox(ref ty) => {
             // We need to know if the type is Sized.
             // !Sized pointers are twice as wide as Sized pointers.
-            if type_is_sized(&ParameterEnvironment::for_item(tcx, nid.0),
-                             nid.1, ty) {
+            if type_is_sized(Some(&ParameterEnvironment::for_item(tcx, nid.0)),
+                             tcx, nid.1, ty) {
 
                 // We try to get the internal type - if that doesn't work out it's OK
                 let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, ty, true);
@@ -324,8 +323,8 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             } else {
                 // It's a trait object or slice!
                 match ty.sty {
-                    ty_str => TypeName::from_str("::rs::StrSlice"),
-                    ty_vec(ref it_ty, None) => {
+                    TyStr => TypeName::from_str("::rs::StrSlice"),
+                    TySlice(ref it_ty) => {
                         let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, it_ty, true);
 
                         if cpp_ty.recover() {
@@ -341,25 +340,25 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     _ => {
                         TypeName::from_str("::rs::TraitObject")
                             .with_warn(format!("Type {} is an unsized type which cannot \
-                                                currently be translated to C++", ty.repr(tcx)),
+                                                currently be translated to C++", ty),
                                        None)
                     },
                 }
             }
         }
 
-        ty_enum(defid, _) => {
+        TyEnum(defid, _) => {
             if type_is_c_like_enum(tcx, rs_ty) {
                 let repr_hints = lookup_repr_hints(tcx, defid);
 
                 // Ensure that there is exactly 1 item in repr_hints
                 if repr_hints.len() == 0 {
                     return TypeName::error(format!("Enum type {} does not have a #[repr(_)] annotation.",
-                                                   rs_ty.repr(tcx)), None)
+                                                   rs_ty), None)
                         .with_note(format!("Consider annotating it with #[repr(C)]"), None);
                 } else if repr_hints.len() > 1 {
                     return TypeName::error(format!("Enum type {} has multiple #[repr(_)] annotations",
-                                                   rs_ty.repr(tcx)), None);
+                                                   rs_ty), None);
                 }
 
                 let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
@@ -392,7 +391,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     }
                     _ => {
                         return TypeName::error(format!("Enum type {} has unsupported #[repr(_)] annotation",
-                                                       rs_ty.repr(tcx)), None);
+                                                       rs_ty), None);
                     }
                 }
 
@@ -409,31 +408,31 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 td.declared.insert(name);
                 tn
             } else {
-                TypeName::error(format!("Enum type {} is not a C-like enum", rs_ty.repr(tcx)), None)
+                TypeName::error(format!("Enum type {} is not a C-like enum", rs_ty), None)
             }
         }
 
-        ty_struct(defid, substs) => {
+        TyStruct(defid, substs) => {
             let repr_hints = lookup_repr_hints(tcx, defid);
 
             // Ensure that there is exactly 1 item in repr_hints, and that it is #[repr(C)]
             if repr_hints.len() == 0 {
                 return TypeName::error(format!("Struct type {} does not have a #[repr(_)] annotation",
-                                               rs_ty.repr(tcx)), None)
+                                               rs_ty), None)
                     .with_note(format!("Consider annotating it with #[repr(C)]"), None);
             } else if repr_hints.len() > 1 {
                 return TypeName::error(format!("Struct type {} has multiple #[repr(_)] annotations",
-                                               rs_ty.repr(tcx)), None);
+                                               rs_ty), None);
             } else if repr_hints[0] != ReprExtern {
                 return TypeName::error(format!("Struct type {} has an unsupported #[repr(_)] annotation",
-                                               rs_ty.repr(tcx)), None);
+                                               rs_ty), None);
             }
 
             // We don't support structs with substitutions (generic type parameters)
             if !substs.types.is_empty() {
                 return TypeName::error(format!("Struct type {} has generic type parameters, \
                                                 which are not supported",
-                                               rs_ty.repr(tcx)), None);
+                                               rs_ty), None);
             }
 
             let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
@@ -460,7 +459,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
         // Unsupported types
         _ => {
             TypeName::error(format!("The type {} cannot be passed between C++ and rust",
-                                    rs_ty.repr(tcx)), None)
+                                    rs_ty), None)
         }
     }
 }
