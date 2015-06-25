@@ -3,6 +3,7 @@
 #![plugin(cpp)]
 
 use std::ffi::CString;
+use std::ptr;
 
 cpp_include!(<cmath>);
 cpp_include!(<vector>);
@@ -129,7 +130,7 @@ fn c_std_lib() {
 #[test]
 fn c_vector() {
     unsafe {
-        // #[cpp_type("std::vector<uint32_t>")]
+        #[cpp_type = "std::vector<uint32_t>"]
         enum CppVec {}
 
         let cpp_vector = cpp!(() -> *const CppVec {
@@ -141,13 +142,14 @@ fn c_vector() {
 
         // Destroy the cpp_vector!
         let result = cpp!((cpp_vector) -> bool {
-            auto x = (std::vector<uint32_t>*) cpp_vector;
-            uint32_t first_element = (*x)[0];
-            delete x;
+            uint32_t first_element = (*cpp_vector)[0];
+            delete cpp_vector;
+            cpp_vector = nullptr;
             return first_element == 10;
         });
 
         assert!(result);
+        assert_eq!(cpp_vector, ptr::null());
     }
 }
 

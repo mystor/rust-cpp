@@ -15,6 +15,7 @@ extern crate gcc;
 
 use rustc::plugin::Registry;
 use syntax::parse::token::intern;
+use syntax::feature_gate::AttributeType;
 
 use syntax::ext::base::{SyntaxExtension};
 
@@ -33,4 +34,5 @@ pub fn plugin_registrar(reg: &mut Registry) {
                                                             None, false));
 
     reg.register_lint_pass(Box::new(lint::CppLintPass));
+    reg.register_attribute(format!("cpp_type"), AttributeType::Whitelisted);
 }

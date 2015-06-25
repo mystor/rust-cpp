@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::mem;
 
-use syntax::ast::{self, Expr, DefId, NodeId};
+use syntax::ast::{self, Expr, DefId, NodeId, MetaNameValue, LitStr};
 use syntax::ast::IntTy::*;
 use syntax::ast::UintTy::*;
 use syntax::ast::FloatTy::*;
@@ -257,6 +257,27 @@ fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
     (ns_before, ns_after, name, path)
 }
 
+
+fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> {
+    let attrs = get_attrs(tcx, defid);
+    for attr in &*attrs {
+        let metaitem = &attr.node.value.node;
+        if let MetaNameValue(ref name, ref value) = *metaitem {
+            if *name == "cpp_type" {
+                return if let LitStr(ref s, _) = value.node {
+                    Some(TypeName::from_str(s))
+                } else {
+                    // Error
+                    Some(TypeName::error(format!("Struct type {} has a #[cpp_type] \
+                                                  annotation, but it's value isn't \
+                                                  a string", rs_ty), None))
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Determine the c++ type for a given expression
 /// This is the entry point for the types module, and is the intended mechanism for
 /// invoking the type translation infrastructure.
@@ -348,6 +369,10 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
         }
 
         TyEnum(defid, _) => {
+            if let Some(tn) = cpp_type_attr_check(tcx, defid, rs_ty) {
+                return tn;
+            }
+
             if type_is_c_like_enum(tcx, rs_ty) {
                 let repr_hints = lookup_repr_hints(tcx, defid);
 
@@ -413,6 +438,10 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
         }
 
         TyStruct(defid, substs) => {
+            if let Some(tn) = cpp_type_attr_check(tcx, defid, rs_ty) {
+                return tn;
+            }
+
             let repr_hints = lookup_repr_hints(tcx, defid);
 
             // Ensure that there is exactly 1 item in repr_hints, and that it is #[repr(C)]
