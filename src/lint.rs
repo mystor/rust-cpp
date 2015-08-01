@@ -55,9 +55,9 @@ impl LintPass for CppLintPass {
         if let ExprCall(ref callee, ref args) = exp.node {
             if let ExprPath(None, ref path) = callee.node {
                 if path.segments.len() == 1 {
-                    let name = path.segments[0].identifier.name.as_str();
+                    let name = path.segments[0].identifier.name;
 
-                    record_type_data(cx, name, exp, args);
+                    record_type_data(cx, &name.as_str(), exp, args);
                 }
             }
         }

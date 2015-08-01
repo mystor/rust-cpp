@@ -25,8 +25,8 @@ impl DeferredStruct {
         let mut tn = TypeName::new(path);
 
         let mut defn = format!("struct {} {{\n", &name);
-        let fields = struct_fields(tcx, self.defid, &Substs::trans_empty());
-        for field{ref name, ref mt} in fields {
+        let fields = tcx.struct_fields(self.defid, &Substs::trans_empty());
+        for Field{ref name, ref mt} in fields {
             let ty = cpp_type_of_internal(td, tcx, self.nid, &mt.ty, false);
 
             // Add the field, merging any errors into our TypeName
@@ -242,7 +242,7 @@ fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
     let mut name = String::new();
     let mut path = format!("::rs::");
 
-    with_path(tcx, defid, |segs| {
+    tcx.with_path(defid, |segs| {
         let mut segs_vec: Vec<_> = segs.map(|x| x.name()).collect();
 
         name = format!("{}", segs_vec.pop().unwrap().as_str());
@@ -259,7 +259,7 @@ fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
 
 
 fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> {
-    let attrs = get_attrs(tcx, defid);
+    let attrs = tcx.get_attrs(defid);
     for attr in &*attrs {
         let metaitem = &attr.node.value.node;
         if let MetaNameValue(ref name, ref value) = *metaitem {
@@ -286,7 +286,7 @@ pub fn cpp_type_of<'tcx>(td: &mut TypeData,
                          expr: &Expr,
                          is_arg: bool) -> TypeName {
     // Get the type object
-    let rs_ty = expr_ty(tcx, expr);
+    let rs_ty = tcx.expr_ty(expr);
 
     if !is_arg {
         // Special case for void return value
@@ -323,14 +323,12 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
         TyFloat(TyF32) => TypeName::from_str("::rs::f32"),
         TyFloat(TyF64) => TypeName::from_str("::rs::f64"),
 
-        TyRawPtr(mt { ref ty, .. }) |
-        TyRef(_, mt { ref ty, .. }) |
+        TyRawPtr(TypeAndMut { ref ty, .. }) |
+        TyRef(_, TypeAndMut { ref ty, .. }) |
         TyBox(ref ty) => {
             // We need to know if the type is Sized.
             // !Sized pointers are twice as wide as Sized pointers.
-            if type_is_sized(Some(&ParameterEnvironment::for_item(tcx, nid.0)),
-                             tcx, nid.1, ty) {
-
+            if ty.is_sized(&ParameterEnvironment::for_item(tcx, nid.0), nid.1) {
                 // We try to get the internal type - if that doesn't work out it's OK
                 let mut cpp_ty = cpp_type_of_internal(td, tcx, nid, ty, true);
 
@@ -373,8 +371,8 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 return tn;
             }
 
-            if type_is_c_like_enum(tcx, rs_ty) {
-                let repr_hints = lookup_repr_hints(tcx, defid);
+            if rs_ty.is_c_like_enum(tcx) {
+                let repr_hints = tcx.lookup_repr_hints(defid);
 
                 // Ensure that there is exactly 1 item in repr_hints
                 if repr_hints.len() == 0 {
@@ -421,7 +419,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 }
 
                 defn.push_str(" {\n");
-                let variants = enum_variants(tcx, defid);
+                let variants = tcx.enum_variants(defid);
                 for variant in &*variants {
                     defn.push_str(&format!("    {} = {},\n",
                                            variant.name.as_str(), variant.disr_val));
@@ -442,7 +440,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 return tn;
             }
 
-            let repr_hints = lookup_repr_hints(tcx, defid);
+            let repr_hints = tcx.lookup_repr_hints(defid);
 
             // Ensure that there is exactly 1 item in repr_hints, and that it is #[repr(C)]
             if repr_hints.len() == 0 {
