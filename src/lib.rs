@@ -29,6 +29,9 @@ pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_syntax_extension(intern("cpp_include"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_include),
                                                             None, false));
+    reg.register_syntax_extension(intern("cpp_header"),
+                                  SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_header),
+                                                            None, false));
     reg.register_syntax_extension(intern("cpp"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp),
                                                             None, false));

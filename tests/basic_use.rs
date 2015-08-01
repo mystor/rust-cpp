@@ -239,3 +239,15 @@ fn repr_c_cycle() {
         assert_eq!(retval, a.b);
     }
 }
+
+cpp_header! {
+    #define SOME_CONSTANT 10
+}
+
+#[test]
+fn header() {
+    unsafe {
+        let c = cpp!(() -> i32 { return SOME_CONSTANT; });
+        assert_eq!(c, 10);
+    }
+}

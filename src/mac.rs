@@ -36,6 +36,29 @@ pub fn expand_cpp_include<'a>(ec: &'a mut ExtCtxt,
     MacEager::items(SmallVector::zero())
 }
 
+pub fn expand_cpp_header<'a>(ec: &'a mut ExtCtxt,
+                             mac_span: Span,
+                             tts: &[TokenTree]) -> Box<MacResult + 'a> {
+    if tts.len() == 0 {
+        ec.span_err(mac_span,
+                    "unexpected empty cpp_header!");
+        return DummyResult::any(mac_span);
+    }
+
+    let span = Span {
+        lo: tts.first().unwrap().get_span().lo,
+        hi: tts.last().unwrap().get_span().hi,
+        expn_id: mac_span.expn_id,
+    };
+
+    let inner = ec.parse_sess.span_diagnostic.cm.span_to_snippet(span).unwrap();
+
+    let mut headers = CPP_HEADERS.lock().unwrap();
+    *headers = format!("{}\n{}\n", *headers, inner);
+
+    MacEager::items(SmallVector::zero())
+}
+
 pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                       mac_span: Span,
                       tts: &[TokenTree]) -> Box<MacResult + 'a> {
