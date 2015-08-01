@@ -2,6 +2,10 @@
 
 Rust-cpp is an experimental compiler plugin for the rust programming language which enables you to write C++ code inline in your rust code.
 
+## WARNING: Highly Unstable
+
+The API and functionality of this compiler plugin is very experimental and unstable. If you decide to use it in one of your applications, be prepared for it to break irreparably, or for the API to change dramatically, in a single dot release, or due to a rustc update.
+
 ## Usage
 
 Import C++ header files
