@@ -3,7 +3,7 @@ name = "cpp"
 version = "0.0.1"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 
-description = "Call C++ code from rust"
+description = "Write C++ code inline in your rust code!"
 repository = "https://github.com/mystor/rust-cpp"
 readme = "README.md"
 license = "MPL-2.0"
