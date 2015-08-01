@@ -22,7 +22,7 @@ Write C++ classes & structs
 cpp_header!{
     class Foo {
         Foo() {}
-    }
+    };
 }
 ```
 
@@ -33,7 +33,7 @@ let foo = 1i32;
 unsafe {
     let bar = cpp!((mut foo) -> i32 {
         foo++;
-        std::vector<i32> a;
+        std::vector<rs::i32> a;
         a.push_back(foo);
         a.push_back(foo + 5);
         return a[0] + a[1];
@@ -67,13 +67,13 @@ fn main() {
 You can also declare your own!
 
 ```rust
-#[cpp_type(std::vector)]
+#[cpp_type = "std::vector<uint32_t>"]
 enum Vector {}
 
 fn main() {
     unsafe {
         let vecref = cpp!(() -> *mut Vector {
-            return new std::vector;
+            return new std::vector<uint32_t>;
         });
     }
 }
