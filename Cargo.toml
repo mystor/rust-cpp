@@ -7,7 +7,7 @@ description = "Write C++ code inline in your rust code!"
 repository = "https://github.com/mystor/rust-cpp"
 readme = "README.md"
 license = "MPL-2.0"
-keywords = ["c++", "ffi"]
+keywords = ["c", "cxx", "cpp", "ffi"]
 
 [lib]
 name = "cpp"
