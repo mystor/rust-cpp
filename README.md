@@ -1,5 +1,7 @@
 # rust-cpp
 
+[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=master)](https://travis-ci.org/mystor/rust-cpp)
+
 Rust-cpp is an experimental compiler plugin for the rust programming language which enables you to write C++ code inline in your rust code.
 
 ## WARNING: Highly Unstable
