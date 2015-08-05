@@ -76,10 +76,7 @@ fn slice_arg() {
         cpp!((mut vs, s) {
             // Create a new slice object from whole cloth,
             // and copy it into the old vs object!
-            rs::Slice<uint8_t> new_vs = {
-                .data = s.data,
-                .len = 4,
-            };
+            rs::Slice<uint8_t> new_vs = { s.data, 4 };
             vs = new_vs;
         });
     }
@@ -97,10 +94,7 @@ fn slice_return() {
         cpp!((s) -> *const [u8] {
             // Create a new slice object from whole cloth,
             // and copy it into the old vs object!
-            rs::Slice<uint8_t> result = {
-                .data = s.data,
-                .len = 4,
-            };
+            rs::Slice<uint8_t> result = { s.data, 4 };
 
             return result;
         })

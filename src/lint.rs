@@ -215,7 +215,7 @@ extern "C" {{{}}}
     env::set_var("OUT_DIR", &out_dir);
     env::set_var("PROFILE", "");
     env::set_var("CXXFLAGS", format!("{} {}", env::var("CXXFLAGS").unwrap_or(String::new()),
-                                     "-std=c++11"));
+                                     "-std=c++0x"));
 
     println!("########### Running GCC ###########");
     gcc::Config::new()

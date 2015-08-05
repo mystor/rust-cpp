@@ -172,6 +172,58 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         })]
     };
 
+    let mut link_attributes = Vec::new();
+
+    {
+        let fndecls = CPP_FNDECLS.lock().unwrap();
+        let target = CPP_TARGET.lock().unwrap();
+
+        let cxxlib = if target.contains("msvc") {
+            None
+        } else if target.contains("darwin") {
+            Some("c++")
+        } else {
+            Some("stdc++")
+        };
+
+        if fndecls.is_empty() {
+            if let Some(lib) = cxxlib {
+                link_attributes.push(
+                    ec.attribute(
+                        mac_span,
+                        ec.meta_list(
+                            mac_span,
+                            InternedString::new("link"),
+                            vec![
+                                ec.meta_name_value(
+                                    mac_span,
+                                    InternedString::new("name"),
+                                    LitStr(InternedString::new(lib),
+                                           CookedStr))
+                                    ])));
+            }
+
+            link_attributes.push(
+                ec.attribute(
+                    mac_span,
+                    ec.meta_list(
+                        mac_span,
+                        InternedString::new("link"),
+                        vec![
+                            ec.meta_name_value(
+                                mac_span,
+                                InternedString::new("name"),
+                                LitStr(InternedString::new("rust_cpp_tmp"),
+                                       CookedStr)),
+                            ec.meta_name_value(
+                                mac_span,
+                                InternedString::new("kind"),
+                                LitStr(InternedString::new("static"),
+                                       CookedStr))
+                                ])));
+        }
+    };
+
     let exp = ec.expr_block(
         // Block
         ec.block(
@@ -181,36 +233,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                 mac_span,
                 ec.item(mac_span,
                         fn_ident.clone(),
-                        vec![
-                            ec.attribute(
-                                mac_span,
-                                ec.meta_list(
-                                    mac_span,
-                                    InternedString::new("link"),
-                                    vec![
-                                        ec.meta_name_value(
-                                            mac_span,
-                                            InternedString::new("name"),
-                                            LitStr(InternedString::new("c++"),
-                                                   CookedStr))
-                                            ])),
-                            ec.attribute(
-                                mac_span,
-                                ec.meta_list(
-                                    mac_span,
-                                    InternedString::new("link"),
-                                    vec![
-                                        ec.meta_name_value(
-                                            mac_span,
-                                            InternedString::new("name"),
-                                            LitStr(InternedString::new("rust_cpp_tmp"),
-                                                   CookedStr)),
-                                        ec.meta_name_value(
-                                            mac_span,
-                                            InternedString::new("kind"),
-                                            LitStr(InternedString::new("static"),
-                                                   CookedStr))
-                                            ]))],
+                        link_attributes,
                         ItemForeignMod(foreign_mod)))],
             Some(ec.expr_call_ident(
                 mac_span,

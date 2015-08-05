@@ -10,6 +10,7 @@ lazy_static! {
     pub static ref CPP_HEADERS: Mutex<String> = Mutex::new(String::new());
     pub static ref CPP_FNDECLS: Mutex<HashMap<String, CppFn>> = Mutex::new(HashMap::new());
     pub static ref CPP_TYPEDATA: Mutex<TypeData> = Mutex::new(TypeData::new());
+    pub static ref CPP_TARGET: Mutex<String> = Mutex::new(String::new());
 }
 
 pub struct CppParam {

@@ -26,6 +26,11 @@ mod types;
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
+    // Record the target triple so that it can be used later in the syntax extension
+    // I do this here because I couldn't find a way to get the target triple in the
+    // syntax extension callbacks.
+    *data::CPP_TARGET.lock().unwrap() = reg.sess.target.target.llvm_target.clone();
+
     reg.register_syntax_extension(intern("cpp_include"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_include),
                                                             None, false));

@@ -349,7 +349,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                         if cpp_ty.recover() {
                             cpp_ty.with_name(format!("::rs::Slice<void>"))
                         } else {
-                            cpp_ty.map_name(|name| format!("::rs::Slice<{}>", &name))
+                            cpp_ty.map_name(|name| format!("::rs::Slice< {} >", &name))
                         }
                     }
 
