@@ -9,7 +9,6 @@ use syntax::attr::*;
 use syntax::codemap::Span;
 
 use rustc::middle::ty::*;
-use rustc::middle::subst::Substs;
 use rustc::lint::{Context, Level};
 
 declare_lint!(pub BAD_CXX_TYPE, Warn, "Unable to translate type to C++");
@@ -21,16 +20,17 @@ struct DeferredStruct {
 
 impl DeferredStruct {
     fn run(self, td: &mut TypeData, tcx: &ctxt) -> TypeName {
+        let struct_def = tcx.lookup_adt_def(self.defid);
+
         let (ns_before, ns_after, name, path) = explode_path(tcx, self.defid);
         let mut tn = TypeName::new(path);
 
         let mut defn = format!("struct {} {{\n", &name);
-        let fields = tcx.struct_fields(self.defid, &Substs::trans_empty());
-        for Field{ref name, ref mt} in fields {
-            let ty = cpp_type_of_internal(td, tcx, self.nid, &mt.ty, false);
+        for fdd in struct_def.all_fields() {
+            let ty = cpp_type_of_internal(td, tcx, self.nid, fdd.unsubst_ty(), false);
 
             // Add the field, merging any errors into our TypeName
-            defn.push_str(&format!("    {} {};\n", &tn.merge(ty), &name));
+            defn.push_str(&format!("    {} {};\n", &tn.merge(ty), &fdd.name));
         }
         defn.push_str("};");
 
@@ -366,12 +366,13 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             }
         }
 
-        TyEnum(defid, _) => {
+        TyEnum(edef, _) => {
+            let defid = edef.did;
             if let Some(tn) = cpp_type_attr_check(tcx, defid, rs_ty) {
                 return tn;
             }
 
-            if rs_ty.is_c_like_enum(tcx) {
+            if edef.is_payloadfree() {
                 let repr_hints = tcx.lookup_repr_hints(defid);
 
                 // Ensure that there is exactly 1 item in repr_hints
@@ -419,8 +420,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                 }
 
                 defn.push_str(" {\n");
-                let variants = tcx.enum_variants(defid);
-                for variant in &*variants {
+                for variant in &edef.variants {
                     defn.push_str(&format!("    {} = {},\n",
                                            variant.name.as_str(), variant.disr_val));
                 }
@@ -435,7 +435,8 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             }
         }
 
-        TyStruct(defid, substs) => {
+        TyStruct(sdef, substs) => {
+            let defid = sdef.did;
             if let Some(tn) = cpp_type_attr_check(tcx, defid, rs_ty) {
                 return tn;
             }
