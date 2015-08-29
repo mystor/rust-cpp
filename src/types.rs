@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::mem;
 
-use syntax::ast::{self, Expr, DefId, NodeId, MetaNameValue, LitStr};
+use syntax::ast::{self, Expr, NodeId, MetaNameValue, LitStr};
 use syntax::ast::IntTy::*;
 use syntax::ast::UintTy::*;
 use syntax::ast::FloatTy::*;
@@ -9,6 +9,7 @@ use syntax::attr::*;
 use syntax::codemap::Span;
 
 use rustc::middle::ty::*;
+use rustc::middle::def_id::DefId;
 use rustc::lint::{Context, Level};
 
 declare_lint!(pub BAD_CXX_TYPE, Warn, "Unable to translate type to C++");
