@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use syntax::ast::Expr;
 use syntax::ast::Expr_::*;
 use syntax::ptr::P;
+use syntax::diagnostic;
 
 use rustc::lint::*;
 use rustc::session::search_paths::SearchPaths;
@@ -202,7 +203,7 @@ extern "C" {{{}}}
     unsafe {
         let sp = &cx.sess().opts.search_paths;
         let sp_mut: &mut SearchPaths = &mut *(sp as *const _ as *mut _);
-        sp_mut.add_path(&out_dir.to_str().unwrap());
+        sp_mut.add_path(&out_dir.to_str().unwrap(), diagnostic::ColorConfig::Never);
     }
 
     // I didn't want to write my own compiler driver-driver, so I'm using gcc.
