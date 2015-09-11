@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 use std::mem;
 
-use syntax::ast::{self, Expr, NodeId, MetaNameValue, LitStr};
-use syntax::ast::IntTy::*;
-use syntax::ast::UintTy::*;
-use syntax::ast::FloatTy::*;
-use syntax::attr::*;
+use rustc_front::hir::{self, Expr, MetaNameValue, LitStr};
+use syntax::ast::NodeId;
+use rustc_front::hir::IntTy::*;
+use rustc_front::hir::UintTy::*;
+use rustc_front::hir::FloatTy::*;
+use rustc_front::attr::*;
 use syntax::codemap::Span;
 
 use rustc::middle::ty::*;
@@ -400,16 +401,16 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     ReprInt(_, ity) => {
                         // #[repr(int_type)] => representation is the int_type!
                         let repr = match ity {
-                            SignedInt(ast::TyI8) => "::rs::i8",
-                            UnsignedInt(ast::TyU8) => "::rs::u8",
-                            SignedInt(ast::TyI16) => "::rs::i16",
-                            UnsignedInt(ast::TyU16) => "::rs::u16",
-                            SignedInt(ast::TyI32) => "::rs::i32",
-                            UnsignedInt(ast::TyU32) => "::rs::u32",
-                            SignedInt(ast::TyI64) => "::rs::i64",
-                            UnsignedInt(ast::TyU64) => "::rs::u64",
-                            SignedInt(ast::TyIs) => "::rs::isize",
-                            UnsignedInt(ast::TyUs) => "::rs::usize",
+                            SignedInt(hir::TyI8) => "::rs::i8",
+                            UnsignedInt(hir::TyU8) => "::rs::u8",
+                            SignedInt(hir::TyI16) => "::rs::i16",
+                            UnsignedInt(hir::TyU16) => "::rs::u16",
+                            SignedInt(hir::TyI32) => "::rs::i32",
+                            UnsignedInt(hir::TyU32) => "::rs::u32",
+                            SignedInt(hir::TyI64) => "::rs::i64",
+                            UnsignedInt(hir::TyU64) => "::rs::u64",
+                            SignedInt(hir::TyIs) => "::rs::isize",
+                            UnsignedInt(hir::TyUs) => "::rs::usize",
                         };
 
                         defn.push_str(&format!(" : {}", repr));
