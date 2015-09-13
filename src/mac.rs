@@ -1,6 +1,6 @@
 use data::*;
 
-use syntax::parse::token::intern;
+use syntax::parse::token::{intern, Eof};
 use syntax::codemap::Span;
 use syntax::util::small_vector::SmallVector;
 use syntax::abi;
@@ -55,6 +55,24 @@ pub fn expand_cpp_header<'a>(ec: &'a mut ExtCtxt,
 
     let mut headers = CPP_HEADERS.lock().unwrap();
     *headers = format!("{}\n{}\n", *headers, inner);
+
+    MacEager::items(SmallVector::zero())
+}
+
+pub fn expand_cpp_flags<'a>(ec: &'a mut ExtCtxt,
+                            mac_span: Span,
+                            tts: &[TokenTree]) -> Box<MacResult + 'a> {
+    let mut parser = ec.new_parser_from_tts(tts);
+    let mut flags = CPP_FLAGS.lock().unwrap();
+
+    while let Some(Some((ref s, _, _))) = parser.parse_optional_str().ok() {
+        flags.push(s.to_string());
+    }
+
+    if let Err(_) = parser.expect(&Eof) {
+        ec.span_err(mac_span, "cpp_flags! may only contain string literals");
+        return DummyResult::expr(mac_span);
+    }
 
     MacEager::items(SmallVector::zero())
 }

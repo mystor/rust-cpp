@@ -218,8 +218,15 @@ extern "C" {{{}}}
     env::set_var("CXXFLAGS", format!("{} {}", env::var("CXXFLAGS").unwrap_or(String::new()),
                                      "-std=c++0x"));
 
+    let flags = CPP_FLAGS.lock().unwrap();
+    let mut config = gcc::Config::new();
+
+    for flag in &*flags {
+        config.flag(flag);
+    }
+
     println!("########### Running GCC ###########");
-    gcc::Config::new()
+    config
         .cpp(true)
         .file("rust_cpp_tmp.cpp")
         .compile("librust_cpp_tmp.a");

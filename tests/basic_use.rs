@@ -8,6 +8,8 @@ use std::ptr;
 cpp_include!(<cmath>);
 cpp_include!(<vector>);
 
+cpp_flags!("-DFOO" "-DBAR");
+
 #[test]
 fn basic_math() {
     let a: i32 = 10;
@@ -243,5 +245,29 @@ fn header() {
     unsafe {
         let c = cpp!(() -> i32 { return SOME_CONSTANT; });
         assert_eq!(c, 10);
+    }
+}
+
+#[test]
+fn flags() {
+    unsafe {
+        let c = cpp!(() -> i32 {
+#ifdef FOO
+            return 10;
+#else
+            return 20;
+#endif
+        });
+
+        let d = cpp!(() -> i32 {
+#ifdef BAR
+            return 10;
+#else
+            return 20;
+#endif
+        });
+
+        assert_eq!(c, 10);
+        assert_eq!(d, 10);
     }
 }
