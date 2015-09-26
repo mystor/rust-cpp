@@ -185,11 +185,12 @@ extern "C" {{{}}}
     let out_dir = super_hack_get_out_dir();
 
     // Create the C++ file which we will compile
-    {
+    let cpp_filename = {
         let path = path::Path::new(&out_dir).join("rust_cpp_tmp.cpp");
-        let mut f = File::create(path).unwrap();
+        let mut f = File::create(&path).unwrap();
         f.write_all(cppcode.as_bytes()).unwrap();
-    }
+        path
+    };
 
 
     // Unfortunately, once the compiler is running, which it is (as we are running
@@ -228,7 +229,7 @@ extern "C" {{{}}}
     println!("########### Running GCC ###########");
     config
         .cpp(true)
-        .file("rust_cpp_tmp.cpp")
+        .file(cpp_filename)
         .compile("librust_cpp_tmp.a");
     println!("########### Done Rust-C++ ############");
 }
