@@ -12,7 +12,7 @@ use syntax::codemap::Span;
 
 use rustc::middle::ty::*;
 use rustc::middle::def_id::DefId;
-use rustc::lint::{Context, Level};
+use rustc::lint::{LintContext, LateContext, Level};
 
 declare_lint!(pub BAD_CXX_TYPE, Warn, "Unable to translate type to C++");
 
@@ -62,7 +62,7 @@ impl TypeData {
         }
     }
 
-    pub fn to_cpp(&mut self, cx: &Context) -> String {
+    pub fn to_cpp(&mut self, cx: &LateContext) -> String {
         while self.queue.len() != 0 {
             let mut todo = Vec::new();
             mem::swap(&mut todo, &mut self.queue);
@@ -124,7 +124,7 @@ impl TypeName {
         }
     }
 
-    pub fn into_name(self, cx: &Context) -> String {
+    pub fn into_name(self, cx: &LateContext) -> String {
         if self.err.len() == 0 {
             for warn in &self.warn {
                 if cx.current_level(BAD_CXX_TYPE) != Level::Allow {

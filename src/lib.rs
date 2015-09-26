@@ -47,6 +47,6 @@ pub fn plugin_registrar(reg: &mut Registry) {
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp),
                                                             None, false));
 
-    reg.register_lint_pass(Box::new(lint::CppLintPass));
+    reg.register_late_lint_pass(Box::new(lint::CppLintPass));
     reg.register_attribute(format!("cpp_type"), AttributeType::Whitelisted);
 }

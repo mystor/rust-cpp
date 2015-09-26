@@ -51,8 +51,10 @@ impl LintPass for CppLintPass {
     fn get_lints(&self) -> LintArray {
         lint_array!(types::BAD_CXX_TYPE)
     }
+}
 
-    fn check_expr(&mut self, cx: &Context, exp: &Expr) {
+impl LateLintPass for CppLintPass {
+    fn check_expr(&mut self, cx: &LateContext, exp: &Expr) {
         if let ExprCall(ref callee, ref args) = exp.node {
             if let ExprPath(None, ref path) = callee.node {
                 if path.segments.len() == 1 {
@@ -65,7 +67,7 @@ impl LintPass for CppLintPass {
     }
 }
 
-fn record_type_data(cx: &Context, name: &str, call: &Expr, args: &[P<Expr>]) {
+fn record_type_data(cx: &LateContext, name: &str, call: &Expr, args: &[P<Expr>]) {
     let mut headers = CPP_HEADERS.lock().unwrap();
     let mut decls = CPP_FNDECLS.lock().unwrap();
     let mut types = CPP_TYPEDATA.lock().unwrap();
@@ -104,7 +106,7 @@ fn record_type_data(cx: &Context, name: &str, call: &Expr, args: &[P<Expr>]) {
     }
 }
 
-fn finalize(cx: &Context,
+fn finalize(cx: &LateContext,
             headers: &mut String,
             types: &mut types::TypeData,
             decls: &mut HashMap<String, CppFn>) {
