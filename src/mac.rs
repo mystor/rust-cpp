@@ -147,7 +147,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
     let params: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
         let arg_ty = ec.ty_ptr(mac_span,
                                ec.ty_ident(mac_span,
-                                           Ident::new(intern("u8"))),
+                                           Ident::with_empty_ctxt(intern("u8"))),
                                mutable);
         ec.arg(mac_span, id.clone(), arg_ty)
     }).collect();
@@ -155,7 +155,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
     let args: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
         let arg_ty = ec.ty_ptr(mac_span,
                                ec.ty_ident(mac_span,
-                                           Ident::new(intern("u8"))),
+                                           Ident::with_empty_ctxt(intern("u8"))),
                                mutable);
 
         let addr_of = if mutable == MutImmutable {
@@ -173,7 +173,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                      arg_ty)
     }).collect();
 
-    let fn_ident = Ident::new(intern(
+    let fn_ident = Ident::with_empty_ctxt(intern(
         &format!("rust_cpp_{}", Uuid::new_v4().to_simple_string())));
 
     // extern "C" declaration of function
