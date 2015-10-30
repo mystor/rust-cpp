@@ -73,9 +73,14 @@ impl CppFn {
                     format!("#line {} {:?}", lines[0].line_index + 1, file.name)
                 }
             }
-            Err(_) => String::new()
+            Err(_) => String::new(),
         };
 
-        format!("{}\n{} {}({}) {}", line, c_ty, self.name, c_params, self.body)
+        format!("{}\n{} {}({}) {}",
+                line,
+                c_ty,
+                self.name,
+                c_params,
+                self.body)
     }
 }

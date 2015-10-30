@@ -117,10 +117,10 @@ impl TypeName {
             name: format!("rs::__Dummy"),
             warn: Vec::new(),
             err: vec![TypeNameProblem {
-                msg: err,
-                span: span,
-                notes: Vec::new(),
-            }],
+                          msg: err,
+                          span: span,
+                          notes: Vec::new(),
+                      }],
         }
     }
 
@@ -153,8 +153,8 @@ impl TypeName {
                     cx.sess().err(&err.msg);
                 }
 
-                cx.sess().note("This type can't be passed by value, and thus \
-                                is an invalid return type");
+                cx.sess()
+                  .note("This type can't be passed by value, and thus is an invalid return type");
 
                 for note in &err.notes {
                     if let Some(span) = note.span {
@@ -202,17 +202,27 @@ impl TypeName {
         self
     }
 
-    pub fn map_name<F>(self, f: F) -> TypeName where F: FnOnce(String) -> String {
+    pub fn map_name<F>(self, f: F) -> TypeName
+        where F: FnOnce(String) -> String
+    {
         let TypeName{ name, warn, err } = self;
         let name = f(name);
-        TypeName{ name: name, warn: warn, err: err }
+        TypeName {
+            name: name,
+            warn: warn,
+            err: err,
+        }
     }
 
     pub fn merge(&mut self, other: TypeName) -> String {
         let TypeName{ name, warn, err } = other;
 
-        for it in warn { self.warn.push(it) }
-        for it in err { self.err.push(it) }
+        for it in warn {
+            self.warn.push(it)
+        }
+        for it in err {
+            self.err.push(it)
+        }
         name
     }
 
@@ -221,7 +231,9 @@ impl TypeName {
     /// they are converted into warnings, and true is returned.
     /// otherwise, false is returned.
     pub fn recover(&mut self) -> bool {
-        if self.err.len() == 0 { return false }
+        if self.err.len() == 0 {
+            return false;
+        }
 
         let mut err = Vec::new();
         mem::swap(&mut self.err, &mut err);
@@ -271,10 +283,11 @@ fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> 
                     Some(TypeName::from_str(s))
                 } else {
                     // Error
-                    Some(TypeName::error(format!("Struct type {} has a #[cpp_type] \
-                                                  annotation, but it's value isn't \
-                                                  a string", rs_ty), None))
-                }
+                    Some(TypeName::error(format!("Struct type {} has a #[cpp_type] annotation, \
+                                                  but it's value isn't a string",
+                                                 rs_ty),
+                                         None))
+                };
             }
         }
     }
@@ -287,7 +300,8 @@ fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> 
 pub fn cpp_type_of<'tcx>(td: &mut TypeData,
                          tcx: &ctxt<'tcx>,
                          expr: &Expr,
-                         is_arg: bool) -> TypeName {
+                         is_arg: bool)
+                         -> TypeName {
     // Get the type object
     let rs_ty = tcx.expr_ty(expr);
 
@@ -307,7 +321,8 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                               tcx: &ctxt<'tcx>,
                               nid: (NodeId, Span),
                               rs_ty: Ty<'tcx>,
-                              in_ptr: bool) -> TypeName {
+                              in_ptr: bool)
+                              -> TypeName {
     match rs_ty.sty {
         TyBool => TypeName::from_str("::rs::bool_"),
 
@@ -362,9 +377,10 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     _ => {
                         TypeName::from_str("::rs::TraitObject")
                             .with_warn(format!("Type {} is an unsized type which cannot \
-                                                currently be translated to C++", ty),
+                                                currently be translated to C++",
+                                               ty),
                                        None)
-                    },
+                    }
                 }
             }
         }
@@ -380,17 +396,23 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
 
                 // Ensure that there is exactly 1 item in repr_hints
                 if repr_hints.len() == 0 {
-                    return TypeName::error(format!("Enum type {} does not have a #[repr(_)] annotation.",
-                                                   rs_ty), None)
-                        .with_note(format!("Consider annotating it with #[repr(C)]"), None);
+                    return TypeName::error(format!("Enum type {} does not have a #[repr(_)] \
+                                                    annotation.",
+                                                   rs_ty),
+                                           None)
+                               .with_note(format!("Consider annotating it with #[repr(C)]"), None);
                 } else if repr_hints.len() > 1 {
-                    return TypeName::error(format!("Enum type {} has multiple #[repr(_)] annotations",
-                                                   rs_ty), None);
+                    return TypeName::error(format!("Enum type {} has multiple #[repr(_)] \
+                                                    annotations",
+                                                   rs_ty),
+                                           None);
                 }
 
                 let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
                 let tn = TypeName::new(path);
-                if td.declared.contains(&name) { return tn; }
+                if td.declared.contains(&name) {
+                    return tn;
+                }
 
                 let mut defn = format!("enum class {}", &name);
 
@@ -417,15 +439,18 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                         defn.push_str(&format!(" : {}", repr));
                     }
                     _ => {
-                        return TypeName::error(format!("Enum type {} has unsupported #[repr(_)] annotation",
-                                                       rs_ty), None);
+                        return TypeName::error(format!("Enum type {} has unsupported #[repr(_)] \
+                                                        annotation",
+                                                       rs_ty),
+                                               None);
                     }
                 }
 
                 defn.push_str(" {\n");
                 for variant in &edef.variants {
                     defn.push_str(&format!("    {} = {},\n",
-                                           variant.name.as_str(), variant.disr_val));
+                                           variant.name.as_str(),
+                                           variant.disr_val));
                 }
                 defn.push_str("};");
 
@@ -448,27 +473,36 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
 
             // Ensure that there is exactly 1 item in repr_hints, and that it is #[repr(C)]
             if repr_hints.len() == 0 {
-                return TypeName::error(format!("Struct type {} does not have a #[repr(_)] annotation",
-                                               rs_ty), None)
-                    .with_note(format!("Consider annotating it with #[repr(C)]"), None);
+                return TypeName::error(format!("Struct type {} does not have a #[repr(_)] \
+                                                annotation",
+                                               rs_ty),
+                                       None)
+                           .with_note(format!("Consider annotating it with #[repr(C)]"), None);
             } else if repr_hints.len() > 1 {
-                return TypeName::error(format!("Struct type {} has multiple #[repr(_)] annotations",
-                                               rs_ty), None);
+                return TypeName::error(format!("Struct type {} has multiple #[repr(_)] \
+                                                annotations",
+                                               rs_ty),
+                                       None);
             } else if repr_hints[0] != ReprExtern {
-                return TypeName::error(format!("Struct type {} has an unsupported #[repr(_)] annotation",
-                                               rs_ty), None);
+                return TypeName::error(format!("Struct type {} has an unsupported #[repr(_)] \
+                                                annotation",
+                                               rs_ty),
+                                       None);
             }
 
             // We don't support structs with substitutions (generic type parameters)
             if !substs.types.is_empty() {
                 return TypeName::error(format!("Struct type {} has generic type parameters, \
                                                 which are not supported",
-                                               rs_ty), None);
+                                               rs_ty),
+                                       None);
             }
 
             let (ns_before, ns_after, name, path) = explode_path(tcx, defid);
             let tn = TypeName::new(path);
-            if td.declared.contains(&name) { return tn; }
+            if td.declared.contains(&name) {
+                return tn;
+            }
 
             let deferred = DeferredStruct {
                 defid: defid,
@@ -476,8 +510,7 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
             };
 
             if in_ptr {
-                td.decls.push_str(&format!("{}\nstruct {};\n{}",
-                                           ns_before, &name, ns_after));
+                td.decls.push_str(&format!("{}\nstruct {};\n{}", ns_before, &name, ns_after));
                 td.queue.push(deferred);
             } else {
                 deferred.run(td, tcx);
@@ -489,8 +522,8 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
 
         // Unsupported types
         _ => {
-            TypeName::error(format!("The type {} cannot be passed between C++ and rust",
-                                    rs_ty), None)
+            TypeName::error(format!("The type {} cannot be passed between C++ and rust", rs_ty),
+                            None)
         }
     }
 }

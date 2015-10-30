@@ -20,7 +20,7 @@ use rustc::plugin::Registry;
 use syntax::parse::token::intern;
 use syntax::feature_gate::AttributeType;
 
-use syntax::ext::base::{SyntaxExtension};
+use syntax::ext::base::SyntaxExtension;
 
 mod data;
 mod mac;
@@ -36,16 +36,20 @@ pub fn plugin_registrar(reg: &mut Registry) {
 
     reg.register_syntax_extension(intern("cpp_include"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_include),
-                                                            None, false));
+                                                            None,
+                                                            false));
     reg.register_syntax_extension(intern("cpp_header"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_header),
-                                                            None, false));
+                                                            None,
+                                                            false));
     reg.register_syntax_extension(intern("cpp_flags"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp_flags),
-                                                            None, false));
+                                                            None,
+                                                            false));
     reg.register_syntax_extension(intern("cpp"),
                                   SyntaxExtension::NormalTT(Box::new(mac::expand_cpp),
-                                                            None, false));
+                                                            None,
+                                                            false));
 
     reg.register_late_lint_pass(Box::new(lint::CppLintPass));
     reg.register_attribute(format!("cpp_type"), AttributeType::Whitelisted);

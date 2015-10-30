@@ -15,10 +15,10 @@ use uuid::Uuid;
 
 pub fn expand_cpp_include<'a>(ec: &'a mut ExtCtxt,
                               mac_span: Span,
-                              tts: &[TokenTree]) -> Box<MacResult + 'a> {
+                              tts: &[TokenTree])
+                              -> Box<MacResult + 'a> {
     if tts.len() == 0 {
-        ec.span_err(mac_span,
-                    "unexpected empty cpp_include!");
+        ec.span_err(mac_span, "unexpected empty cpp_include!");
         return DummyResult::any(mac_span);
     }
 
@@ -38,10 +38,10 @@ pub fn expand_cpp_include<'a>(ec: &'a mut ExtCtxt,
 
 pub fn expand_cpp_header<'a>(ec: &'a mut ExtCtxt,
                              mac_span: Span,
-                             tts: &[TokenTree]) -> Box<MacResult + 'a> {
+                             tts: &[TokenTree])
+                             -> Box<MacResult + 'a> {
     if tts.len() == 0 {
-        ec.span_err(mac_span,
-                    "unexpected empty cpp_header!");
+        ec.span_err(mac_span, "unexpected empty cpp_header!");
         return DummyResult::any(mac_span);
     }
 
@@ -61,7 +61,8 @@ pub fn expand_cpp_header<'a>(ec: &'a mut ExtCtxt,
 
 pub fn expand_cpp_flags<'a>(ec: &'a mut ExtCtxt,
                             mac_span: Span,
-                            tts: &[TokenTree]) -> Box<MacResult + 'a> {
+                            tts: &[TokenTree])
+                            -> Box<MacResult + 'a> {
     let mut parser = ec.new_parser_from_tts(tts);
     let mut flags = CPP_FLAGS.lock().unwrap();
 
@@ -79,7 +80,8 @@ pub fn expand_cpp_flags<'a>(ec: &'a mut ExtCtxt,
 
 pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                       mac_span: Span,
-                      tts: &[TokenTree]) -> Box<MacResult + 'a> {
+                      tts: &[TokenTree])
+                      -> Box<MacResult + 'a> {
     let mut parser = ec.new_parser_from_tts(tts);
     let mut captured_idents = Vec::new();
 
@@ -88,19 +90,20 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         Some(TtDelimited(span, ref del)) => {
             let mut parser = ec.new_parser_from_tts(&del.tts[..]);
             loop {
-                if parser.check(&token::Eof) { break }
+                if parser.check(&token::Eof) {
+                    break;
+                }
 
                 let mutable = parser.parse_mutability().unwrap_or(MutImmutable);
                 let ident = parser.parse_ident().unwrap();
                 captured_idents.push((ident, mutable));
 
                 if !parser.eat(&token::Comma).unwrap() {
-                    break
+                    break;
                 }
             }
             if !parser.check(&token::Eof) {
-                ec.span_err(span,
-                            "Unexpected token in captured identifier list");
+                ec.span_err(span, "Unexpected token in captured identifier list");
                 return DummyResult::expr(span);
             }
         }
@@ -144,50 +147,56 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
 
     // Generate the rust parameters and arguments
-    let params: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
-        let arg_ty = ec.ty_ptr(mac_span,
+    let params: Vec<_> = captured_idents.iter()
+                                        .map(|&(ref id, mutable)| {
+                                            let arg_ty = ec.ty_ptr(mac_span,
                                ec.ty_ident(mac_span,
                                            Ident::with_empty_ctxt(intern("u8"))),
                                mutable);
-        ec.arg(mac_span, id.clone(), arg_ty)
-    }).collect();
+                                            ec.arg(mac_span, id.clone(), arg_ty)
+                                        })
+                                        .collect();
 
-    let args: Vec<_> = captured_idents.iter().map(|&(ref id, mutable)| {
-        let arg_ty = ec.ty_ptr(mac_span,
+    let args: Vec<_> = captured_idents.iter()
+                                      .map(|&(ref id, mutable)| {
+                                          let arg_ty = ec.ty_ptr(mac_span,
                                ec.ty_ident(mac_span,
                                            Ident::with_empty_ctxt(intern("u8"))),
                                mutable);
 
-        let addr_of = if mutable == MutImmutable {
-            ec.expr_addr_of(mac_span, ec.expr_ident(mac_span, id.clone()))
-        } else {
-            ec.expr_mut_addr_of(mac_span, ec.expr_ident(mac_span, id.clone()))
-        };
+                                          let addr_of = if mutable == MutImmutable {
+                                              ec.expr_addr_of(mac_span,
+                                                              ec.expr_ident(mac_span, id.clone()))
+                                          } else {
+                                              ec.expr_mut_addr_of(mac_span,
+                                                                  ec.expr_ident(mac_span,
+                                                                                id.clone()))
+                                          };
 
-        ec.expr_cast(mac_span,
+                                          ec.expr_cast(mac_span,
                      ec.expr_cast(mac_span,
                                   addr_of,
                                   ec.ty_ptr(mac_span,
                                             ec.ty_infer(mac_span),
                                             mutable)),
                      arg_ty)
-    }).collect();
+                                      })
+                                      .collect();
 
-    let fn_ident = Ident::with_empty_ctxt(intern(
-        &format!("rust_cpp_{}", Uuid::new_v4().to_simple_string())));
+    let fn_ident = Ident::with_empty_ctxt(intern(&format!("rust_cpp_{}",
+                                                          Uuid::new_v4().to_simple_string())));
 
     // extern "C" declaration of function
     let foreign_mod = ForeignMod {
         abi: abi::C,
         items: vec![P(ForeignItem {
-            ident: fn_ident.clone(),
-            attrs: Vec::new(),
-            node: ForeignItemFn(ec.fn_decl(params, ret_ty),
-                                empty_generics()),
-            id: DUMMY_NODE_ID,
-            span: mac_span,
-            vis: Inherited,
-        })]
+                        ident: fn_ident.clone(),
+                        attrs: Vec::new(),
+                        node: ForeignItemFn(ec.fn_decl(params, ret_ty), empty_generics()),
+                        id: DUMMY_NODE_ID,
+                        span: mac_span,
+                        vis: Inherited,
+                    })],
     };
 
     let mut link_attributes = Vec::new();
@@ -206,13 +215,10 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
         if fndecls.is_empty() {
             if let Some(lib) = cxxlib {
-                link_attributes.push(
-                    ec.attribute(
-                        mac_span,
-                        ec.meta_list(
-                            mac_span,
-                            InternedString::new("link"),
-                            vec![
+                link_attributes.push(ec.attribute(mac_span,
+                                                  ec.meta_list(mac_span,
+                                                               InternedString::new("link"),
+                                                               vec![
                                 ec.meta_name_value(
                                     mac_span,
                                     InternedString::new("name"),
@@ -221,13 +227,10 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                                     ])));
             }
 
-            link_attributes.push(
-                ec.attribute(
-                    mac_span,
-                    ec.meta_list(
-                        mac_span,
-                        InternedString::new("link"),
-                        vec![
+            link_attributes.push(ec.attribute(mac_span,
+                                              ec.meta_list(mac_span,
+                                                           InternedString::new("link"),
+                                                           vec![
                             ec.meta_name_value(
                                 mac_span,
                                 InternedString::new("name"),
@@ -240,31 +243,29 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                                        CookedStr))
                                 ])));
         }
-    };
+    }
 
-    let exp = ec.expr_block(
-        // Block
-        ec.block(
-            mac_span,
-            // Extern "C" declarations for the c implemented functions
-            vec![ec.stmt_item(
-                mac_span,
-                ec.item(mac_span,
-                        fn_ident.clone(),
-                        link_attributes,
-                        ItemForeignMod(foreign_mod)))],
-            Some(ec.expr_call_ident(
-                mac_span,
-                fn_ident.clone(),
-                args))));
+    let exp = ec.expr_block(// Block
+                            ec.block(mac_span,
+                                     // Extern "C" declarations for the c implemented functions
+                                     vec![ec.stmt_item(mac_span,
+                                                       ec.item(mac_span,
+                                                               fn_ident.clone(),
+                                                               link_attributes,
+                                                               ItemForeignMod(foreign_mod)))],
+                                     Some(ec.expr_call_ident(mac_span, fn_ident.clone(), args))));
 
     let cpp_decl = CppFn {
         name: format!("{}", fn_ident.name.as_str()),
-        arg_idents: captured_idents.iter().map(|&(ref id, mutable)| CppParam {
-            mutable: mutable == MutMutable,
-            name: format!("{}", id.name.as_str()),
-            ty: None,
-        }).collect(),
+        arg_idents: captured_idents.iter()
+                                   .map(|&(ref id, mutable)| {
+                                       CppParam {
+                                           mutable: mutable == MutMutable,
+                                           name: format!("{}", id.name.as_str()),
+                                           ty: None,
+                                       }
+                                   })
+                                   .collect(),
         ret_ty: None,
         body: body_str,
         span: mac_span,

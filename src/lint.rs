@@ -31,9 +31,7 @@ fn super_hack_get_out_dir() -> OsString {
         }
     }
 
-    out_dir.unwrap_or_else(|| {
-        env::current_dir().unwrap().into_os_string()
-    })
+    out_dir.unwrap_or_else(|| env::current_dir().unwrap().into_os_string())
 }
 
 /// This lint pass right now doesn't actually do any linting, instead it has the role
@@ -74,9 +72,9 @@ fn record_type_data(cx: &LateContext, name: &str, call: &Expr, args: &[P<Expr>])
 
     if let Some(cppfn) = decls.get_mut(name) {
         cppfn.ret_ty = Some(types::cpp_type_of(&mut types, cx.tcx, call, false)
-                            .with_note(format!("Used in the return value of this cpp! block"),
-                                       Some(cppfn.span))
-                            .into_name(cx));
+                                .with_note(format!("Used in the return value of this cpp! block"),
+                                           Some(cppfn.span))
+                                .into_name(cx));
 
         for (i, arg) in args.iter().enumerate() {
             // Strip the two casts off
@@ -84,19 +82,23 @@ fn record_type_data(cx: &LateContext, name: &str, call: &Expr, args: &[P<Expr>])
                 if let ExprCast(ref e, _) = e.node {
                     if let ExprAddrOf(_, ref e) = e.node {
                         let mut tn = types::cpp_type_of(&mut types, cx.tcx, e, true)
-                            .with_note(format!("Used in the argument `{}` of this cpp! block",
-                                               cppfn.arg_idents[i].name), Some(cppfn.span));
+                                         .with_note(format!("Used in the argument `{}` of this \
+                                                             cpp! block",
+                                                            cppfn.arg_idents[i].name),
+                                                    Some(cppfn.span));
                         tn.recover(); // We are in a reference, so we shouldn't error
                         cppfn.arg_idents[i].ty = Some(tn.into_name(cx));
 
-                        continue
+                        continue;
                     }
                 }
             }
 
             panic!("Expected a double-casted reference as an argument.")
         }
-    } else { return }
+    } else {
+        return;
+    }
 
     // We've processed all of them!
     // Finalize!
@@ -180,7 +182,12 @@ namespace rs {{
 
 /* User-generated function declarations */
 extern "C" {{{}}}
-"#, cx.sess().target.uint_type, cx.sess().target.int_type, *headers, types.to_cpp(cx), fndecls);
+"#,
+                          cx.sess().target.uint_type,
+                          cx.sess().target.int_type,
+                          *headers,
+                          types.to_cpp(cx),
+                          fndecls);
 
     // Get the output directory, which is _way_ harder than I was expecting,
     // (also super hacky).
@@ -196,9 +203,11 @@ extern "C" {{{}}}
 
 
     // Unfortunately, once the compiler is running, which it is (as we are running
-    // inside of it), there doesn't appear to be a way to add SearchPaths for library
+    // inside of it), there doesn't appear to be a way to add SearchPaths for
+    // library
     // lookup.
-    // To get around this, this unsafe block takes the shared reference to the parsed
+    // To get around this, this unsafe block takes the shared reference to the
+    // parsed
     // options SearchPaths object, casts it to a mutable reference, and adds a path
     // to the SearchPaths object through that mutable reference.
     // The rustc backend hasn't read from this object into it's own internal storage
@@ -214,12 +223,15 @@ extern "C" {{{}}}
     // to set a bunch of environment variables to trick it into not crashing
     env::set_var("TARGET", &cx.sess().target.target.llvm_target);
     env::set_var("HOST", &cx.sess().host.llvm_target);
-    env::set_var("OPT_LEVEL", format!("{}", cx.sess().opts.cg.opt_level.unwrap_or(0)));
+    env::set_var("OPT_LEVEL",
+                 format!("{}", cx.sess().opts.cg.opt_level.unwrap_or(0)));
     env::set_var("CARGO_MANIFEST_DIR", &out_dir);
     env::set_var("OUT_DIR", &out_dir);
     env::set_var("PROFILE", "");
-    env::set_var("CXXFLAGS", format!("{} {}", env::var("CXXFLAGS").unwrap_or(String::new()),
-                                     "-std=c++0x"));
+    env::set_var("CXXFLAGS",
+                 format!("{} {}",
+                         env::var("CXXFLAGS").unwrap_or(String::new()),
+                         "-std=c++0x"));
 
     let flags = CPP_FLAGS.lock().unwrap();
     let mut config = gcc::Config::new();
@@ -229,9 +241,8 @@ extern "C" {{{}}}
     }
 
     println!("########### Running GCC ###########");
-    config
-        .cpp(true)
-        .file(cpp_filename)
-        .compile("librust_cpp_tmp.a");
+    config.cpp(true)
+          .file(cpp_filename)
+          .compile("librust_cpp_tmp.a");
     println!("########### Done Rust-C++ ############");
 }
