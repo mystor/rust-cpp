@@ -120,7 +120,12 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     // Check if we are looking at an ->
     let ret_ty = if parser.eat(&token::RArrow).unwrap() {
-        parser.parse_ty()
+        if let Ok(ty) = parser.parse_ty_nopanic() {
+            ty
+        } else {
+            ec.span_err(mac_span, "Unexpected error while parsing type");
+            return DummyResult::expr(mac_span);
+        }
     } else {
         ec.ty(mac_span, TyTup(Vec::new()))
     };
