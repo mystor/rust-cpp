@@ -87,7 +87,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     // Parse the identifier list
     match parser.parse_token_tree().ok() {
-        Some(TtDelimited(span, ref del)) => {
+        Some(TokenTree::Delimited(span, ref del)) => {
             let mut parser = ec.new_parser_from_tts(&del.tts[..]);
             loop {
                 if parser.check(&token::Eof) {
@@ -136,7 +136,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     // Extract the string body of the c++ code
     let body_str = match body_tt {
-        TtDelimited(span, ref del) => {
+        TokenTree::Delimited(span, ref del) => {
             if del.open_token() != token::OpenDelim(token::Brace) {
                 ec.span_err(span, "cpp! body must be surrounded by `{}`");
                 return DummyResult::expr(span);
