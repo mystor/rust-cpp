@@ -12,11 +12,14 @@ extern crate rustc_front;
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate rustc_plugin;
+
 extern crate uuid;
 extern crate gcc;
 
 
-use rustc::plugin::Registry;
+use rustc_plugin::Registry;
 use syntax::parse::token::intern;
 use syntax::feature_gate::AttributeType;
 
