@@ -1,6 +1,6 @@
 [package]
 name = "cpp"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 
 description = "Write C++ code inline in your rust code!"
