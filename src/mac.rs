@@ -5,7 +5,6 @@ use syntax::codemap::Span;
 use syntax::util::small_vector::SmallVector;
 use syntax::abi;
 use syntax::ast::*;
-use syntax::ast_util::empty_generics;
 use syntax::ext::base::{MacResult, ExtCtxt, DummyResult, MacEager};
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{self, InternedString};
@@ -28,7 +27,7 @@ pub fn expand_cpp_include<'a>(ec: &'a mut ExtCtxt,
         expn_id: mac_span.expn_id,
     };
 
-    let inner = ec.parse_sess.span_diagnostic.cm.span_to_snippet(span).unwrap();
+    let inner = ec.parse_sess.codemap().span_to_snippet(span).unwrap();
 
     let mut headers = CPP_HEADERS.lock().unwrap();
     *headers = format!("{}\n#include {}\n", *headers, inner);
@@ -51,7 +50,7 @@ pub fn expand_cpp_header<'a>(ec: &'a mut ExtCtxt,
         expn_id: mac_span.expn_id,
     };
 
-    let inner = ec.parse_sess.span_diagnostic.cm.span_to_snippet(span).unwrap();
+    let inner = ec.parse_sess.codemap().span_to_snippet(span).unwrap();
 
     let mut headers = CPP_HEADERS.lock().unwrap();
     *headers = format!("{}\n{}\n", *headers, inner);
@@ -142,7 +141,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                 return DummyResult::expr(span);
             }
 
-            ec.parse_sess.span_diagnostic.cm.span_to_snippet(span).unwrap()
+            ec.parse_sess.codemap().span_to_snippet(span).unwrap()
         }
         _ => {
             ec.span_err(mac_span, "cpp! body must be a block surrounded by `{}`");
@@ -197,7 +196,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         items: vec![P(ForeignItem {
                         ident: fn_ident.clone(),
                         attrs: Vec::new(),
-                        node: ForeignItemFn(ec.fn_decl(params, ret_ty), empty_generics()),
+                        node: ForeignItemFn(ec.fn_decl(params, ret_ty), Generics::default()),
                         id: DUMMY_NODE_ID,
                         span: mac_span,
                         vis: Inherited,

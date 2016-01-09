@@ -10,6 +10,13 @@ The API and functionality of this compiler plugin is very experimental and unsta
 
 ## Usage
 
+Use the plugin
+
+```rust
+#![feature(plugin)]
+#![plugin(cpp)]
+```
+
 Import C++ header files
 
 ```rust
