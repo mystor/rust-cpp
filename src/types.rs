@@ -134,13 +134,13 @@ impl TypeName {
                         cx.lint(BAD_CXX_TYPE, &warn.msg);
                     }
 
-                    cx.sess().note("C++ code will recieve an opaque reference");
+                    cx.sess().note_without_error("C++ code will recieve an opaque reference");
 
                     for note in &warn.notes {
                         if let Some(span) = note.span {
-                            cx.sess().span_note(span, &note.msg);
+                            cx.sess().span_note_without_error(span, &note.msg);
                         } else {
-                            cx.sess().note(&note.msg);
+                            cx.sess().note_without_error(&note.msg);
                         }
                     }
                 }
@@ -154,13 +154,13 @@ impl TypeName {
                 }
 
                 cx.sess()
-                  .note("This type can't be passed by value, and thus is an invalid return type");
+                  .note_without_error("This type can't be passed by value, and thus is an invalid return type");
 
                 for note in &err.notes {
                     if let Some(span) = note.span {
-                        cx.sess().span_note(span, &note.msg);
+                        cx.sess().span_note_without_error(span, &note.msg);
                     } else {
-                        cx.sess().note(&note.msg);
+                        cx.sess().note_without_error(&note.msg);
                     }
                 }
             }
