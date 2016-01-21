@@ -14,6 +14,7 @@ use syntax::errors;
 
 use rustc::lint::*;
 use rustc::session::search_paths::SearchPaths;
+use rustc::session::config::ErrorOutputType;
 
 use gcc;
 
@@ -215,7 +216,8 @@ extern "C" {{{}}}
     unsafe {
         let sp = &cx.sess().opts.search_paths;
         let sp_mut: &mut SearchPaths = &mut *(sp as *const _ as *mut _);
-        sp_mut.add_path(&out_dir.to_str().unwrap(), errors::ColorConfig::Never);
+        sp_mut.add_path(&out_dir.to_str().unwrap(),
+                        ErrorOutputType::HumanReadable(errors::ColorConfig::Never));
     }
 
     // I didn't want to write my own compiler driver-driver, so I'm using gcc.

@@ -65,7 +65,7 @@ pub fn expand_cpp_flags<'a>(ec: &'a mut ExtCtxt,
     let mut parser = ec.new_parser_from_tts(tts);
     let mut flags = CPP_FLAGS.lock().unwrap();
 
-    while let Some(Some((ref s, _, _))) = parser.parse_optional_str().ok() {
+    while let Some((ref s, _, _)) = parser.parse_optional_str() {
         flags.push(s.to_string());
     }
 
@@ -97,7 +97,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                 let ident = parser.parse_ident().unwrap();
                 captured_idents.push((ident, mutable));
 
-                if !parser.eat(&token::Comma).unwrap() {
+                if !parser.eat(&token::Comma) {
                     break;
                 }
             }
@@ -118,7 +118,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
     }
 
     // Check if we are looking at an ->
-    let ret_ty = if parser.eat(&token::RArrow).unwrap() {
+    let ret_ty = if parser.eat(&token::RArrow) {
         if let Ok(ty) = parser.parse_ty() {
             ty
         } else {
