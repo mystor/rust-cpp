@@ -7,7 +7,7 @@ use syntax::ast::NodeId;
 use syntax::ast::IntTy::*;
 use syntax::ast::UintTy::*;
 use syntax::ast::FloatTy::*;
-use syntax::attr::*;
+use syntax::attr::{SignedInt, UnsignedInt, ReprExtern, ReprInt};
 use syntax::codemap::Span;
 
 use rustc::middle::ty::*;
