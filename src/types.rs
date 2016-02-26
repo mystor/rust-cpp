@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::mem;
 
 use rustc_front::hir::Expr;
-use syntax::ast::{self, MetaNameValue, LitStr};
+use syntax::ast::{self, MetaItemKind, LitKind};
 use syntax::ast::NodeId;
 use syntax::ast::IntTy::*;
 use syntax::ast::UintTy::*;
@@ -154,7 +154,8 @@ impl TypeName {
                 }
 
                 cx.sess()
-                  .note_without_error("This type can't be passed by value, and thus is an invalid return type");
+                  .note_without_error("This type can't be passed by value, and thus is an \
+                                       invalid return type");
 
                 for note in &err.notes {
                     if let Some(span) = note.span {
@@ -277,9 +278,9 @@ fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> 
     let attrs = tcx.get_attrs(defid);
     for attr in &*attrs {
         let metaitem = &attr.node.value.node;
-        if let MetaNameValue(ref name, ref value) = *metaitem {
+        if let MetaItemKind::NameValue(ref name, ref value) = *metaitem {
             if *name == "cpp_type" {
-                return if let LitStr(ref s, _) = value.node {
+                return if let LitKind::Str(ref s, _) = value.node {
                     Some(TypeName::from_str(s))
                 } else {
                     // Error
@@ -326,20 +327,20 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
     match rs_ty.sty {
         TyBool => TypeName::from_str("::rs::bool_"),
 
-        TyInt(TyIs) => TypeName::from_str("::rs::isize"),
-        TyInt(TyI8) => TypeName::from_str("::rs::i8"),
-        TyInt(TyI16) => TypeName::from_str("::rs::i16"),
-        TyInt(TyI32) => TypeName::from_str("::rs::i32"),
-        TyInt(TyI64) => TypeName::from_str("::rs::i64"),
+        TyInt(Is) => TypeName::from_str("::rs::isize"),
+        TyInt(I8) => TypeName::from_str("::rs::i8"),
+        TyInt(I16) => TypeName::from_str("::rs::i16"),
+        TyInt(I32) => TypeName::from_str("::rs::i32"),
+        TyInt(I64) => TypeName::from_str("::rs::i64"),
 
-        TyUint(TyUs) => TypeName::from_str("::rs::usize"),
-        TyUint(TyU8) => TypeName::from_str("::rs::u8"),
-        TyUint(TyU16) => TypeName::from_str("::rs::u16"),
-        TyUint(TyU32) => TypeName::from_str("::rs::u32"),
-        TyUint(TyU64) => TypeName::from_str("::rs::u64"),
+        TyUint(Us) => TypeName::from_str("::rs::usize"),
+        TyUint(U8) => TypeName::from_str("::rs::u8"),
+        TyUint(U16) => TypeName::from_str("::rs::u16"),
+        TyUint(U32) => TypeName::from_str("::rs::u32"),
+        TyUint(U64) => TypeName::from_str("::rs::u64"),
 
-        TyFloat(TyF32) => TypeName::from_str("::rs::f32"),
-        TyFloat(TyF64) => TypeName::from_str("::rs::f64"),
+        TyFloat(F32) => TypeName::from_str("::rs::f32"),
+        TyFloat(F64) => TypeName::from_str("::rs::f64"),
 
         TyRawPtr(TypeAndMut { ref ty, .. }) |
         TyRef(_, TypeAndMut { ref ty, .. }) |
@@ -424,16 +425,16 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
                     ReprInt(_, ity) => {
                         // #[repr(int_type)] => representation is the int_type!
                         let repr = match ity {
-                            SignedInt(ast::TyI8) => "::rs::i8",
-                            UnsignedInt(ast::TyU8) => "::rs::u8",
-                            SignedInt(ast::TyI16) => "::rs::i16",
-                            UnsignedInt(ast::TyU16) => "::rs::u16",
-                            SignedInt(ast::TyI32) => "::rs::i32",
-                            UnsignedInt(ast::TyU32) => "::rs::u32",
-                            SignedInt(ast::TyI64) => "::rs::i64",
-                            UnsignedInt(ast::TyU64) => "::rs::u64",
-                            SignedInt(ast::TyIs) => "::rs::isize",
-                            UnsignedInt(ast::TyUs) => "::rs::usize",
+                            SignedInt(ast::IntTy::I8) => "::rs::i8",
+                            UnsignedInt(ast::UintTy::U8) => "::rs::u8",
+                            SignedInt(ast::IntTy::I16) => "::rs::i16",
+                            UnsignedInt(ast::UintTy::U16) => "::rs::u16",
+                            SignedInt(ast::IntTy::I32) => "::rs::i32",
+                            UnsignedInt(ast::UintTy::U32) => "::rs::u32",
+                            SignedInt(ast::IntTy::I64) => "::rs::i64",
+                            UnsignedInt(ast::UintTy::U64) => "::rs::u64",
+                            SignedInt(ast::IntTy::Is) => "::rs::isize",
+                            UnsignedInt(ast::UintTy::Us) => "::rs::usize",
                         };
 
                         defn.push_str(&format!(" : {}", repr));

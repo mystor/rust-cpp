@@ -8,7 +8,6 @@ use syntax::ast::*;
 use syntax::ext::base::{MacResult, ExtCtxt, DummyResult, MacEager};
 use syntax::ext::build::AstBuilder;
 use syntax::parse::token::{self, InternedString};
-use syntax::ptr::*;
 
 use uuid::Uuid;
 
@@ -93,7 +92,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                     break;
                 }
 
-                let mutable = parser.parse_mutability().unwrap_or(MutImmutable);
+                let mutable = parser.parse_mutability().unwrap_or(Mutability::Immutable);
                 let ident = parser.parse_ident().unwrap();
                 captured_idents.push((ident, mutable));
 
@@ -126,7 +125,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
             return DummyResult::expr(mac_span);
         }
     } else {
-        ec.ty(mac_span, TyTup(Vec::new()))
+        ec.ty(mac_span, TyKind::Tup(Vec::new()))
     };
 
     // Read in the body
@@ -168,7 +167,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                                            Ident::with_empty_ctxt(intern("u8"))),
                                mutable);
 
-                                          let addr_of = if mutable == MutImmutable {
+                                          let addr_of = if mutable == Mutability::Immutable {
                                               ec.expr_addr_of(mac_span,
                                                               ec.expr_ident(mac_span, id.clone()))
                                           } else {
@@ -192,15 +191,15 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
 
     // extern "C" declaration of function
     let foreign_mod = ForeignMod {
-        abi: abi::C,
-        items: vec![P(ForeignItem {
+        abi: abi::Abi::C,
+        items: vec![ForeignItem {
                         ident: fn_ident.clone(),
                         attrs: Vec::new(),
-                        node: ForeignItemFn(ec.fn_decl(params, ret_ty), Generics::default()),
+                        node: ForeignItemKind::Fn(ec.fn_decl(params, ret_ty), Generics::default()),
                         id: DUMMY_NODE_ID,
                         span: mac_span,
-                        vis: Inherited,
-                    })],
+                        vis: Visibility::Inherited,
+                    }],
     };
 
     let mut link_attributes = Vec::new();
@@ -226,8 +225,8 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                                 ec.meta_name_value(
                                     mac_span,
                                     InternedString::new("name"),
-                                    LitStr(InternedString::new(lib),
-                                           CookedStr))
+                                    LitKind::Str(InternedString::new(lib),
+                                                 StrStyle::Cooked))
                                     ])));
             }
 
@@ -238,13 +237,13 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                             ec.meta_name_value(
                                 mac_span,
                                 InternedString::new("name"),
-                                LitStr(InternedString::new("rust_cpp_tmp"),
-                                       CookedStr)),
+                                LitKind::Str(InternedString::new("rust_cpp_tmp"),
+                                             StrStyle::Cooked)),
                             ec.meta_name_value(
                                 mac_span,
                                 InternedString::new("kind"),
-                                LitStr(InternedString::new("static"),
-                                       CookedStr))
+                                LitKind::Str(InternedString::new("static"),
+                                             StrStyle::Cooked))
                                 ])));
         }
     }
@@ -253,10 +252,10 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
                             ec.block(mac_span,
                                      // Extern "C" declarations for the c implemented functions
                                      vec![ec.stmt_item(mac_span,
-                                                       ec.item(mac_span,
-                                                               fn_ident.clone(),
-                                                               link_attributes,
-                                                               ItemForeignMod(foreign_mod)))],
+                                                 ec.item(mac_span,
+                                                         fn_ident.clone(),
+                                                         link_attributes,
+                                                         ItemKind::ForeignMod(foreign_mod)))],
                                      Some(ec.expr_call_ident(mac_span, fn_ident.clone(), args))));
 
     let cpp_decl = CppFn {
@@ -264,7 +263,7 @@ pub fn expand_cpp<'a>(ec: &'a mut ExtCtxt,
         arg_idents: captured_idents.iter()
                                    .map(|&(ref id, mutable)| {
                                        CppParam {
-                                           mutable: mutable == MutMutable,
+                                           mutable: mutable == Mutability::Mutable,
                                            name: format!("{}", id.name.as_str()),
                                            ty: None,
                                        }
