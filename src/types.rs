@@ -22,7 +22,7 @@ struct DeferredStruct {
 }
 
 impl DeferredStruct {
-    fn run(self, td: &mut TypeData, tcx: &ctxt) -> TypeName {
+    fn run(self, td: &mut TypeData, tcx: &TyCtxt) -> TypeName {
         let struct_def = tcx.lookup_adt_def(self.defid);
 
         let (ns_before, ns_after, name, path) = explode_path(tcx, self.defid);
@@ -252,7 +252,7 @@ impl TypeName {
 /// ns_after: The `}` declarations which should be placed after the declaration
 /// name: The name of the struct or enum itself
 /// path: The fully qualified path in C++ which the struct/enum should exist at
-fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
+fn explode_path(tcx: &TyCtxt, defid: DefId) -> (String, String, String, String) {
     let mut ns_before = String::new();
     let mut ns_after = String::new();
     let mut name = String::new();
@@ -274,7 +274,7 @@ fn explode_path(tcx: &ctxt, defid: DefId) -> (String, String, String, String) {
 }
 
 
-fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> {
+fn cpp_type_attr_check(tcx: &TyCtxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> {
     let attrs = tcx.get_attrs(defid);
     for attr in &*attrs {
         let metaitem = &attr.node.value.node;
@@ -299,7 +299,7 @@ fn cpp_type_attr_check(tcx: &ctxt, defid: DefId, rs_ty: Ty) -> Option<TypeName> 
 /// This is the entry point for the types module, and is the intended mechanism for
 /// invoking the type translation infrastructure.
 pub fn cpp_type_of<'tcx>(td: &mut TypeData,
-                         tcx: &ctxt<'tcx>,
+                         tcx: &TyCtxt<'tcx>,
                          expr: &Expr,
                          is_arg: bool)
                          -> TypeName {
@@ -319,7 +319,7 @@ pub fn cpp_type_of<'tcx>(td: &mut TypeData,
 }
 
 fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
-                              tcx: &ctxt<'tcx>,
+                              tcx: &TyCtxt<'tcx>,
                               nid: (NodeId, Span),
                               rs_ty: Ty<'tcx>,
                               in_ptr: bool)
