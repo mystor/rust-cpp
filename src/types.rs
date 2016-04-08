@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::mem;
 
-use rustc_front::hir::Expr;
+use rustc::hir::Expr;
 use syntax::ast::{self, MetaItemKind, LitKind};
 use syntax::ast::NodeId;
 use syntax::ast::IntTy::*;
@@ -10,8 +10,8 @@ use syntax::ast::FloatTy::*;
 use syntax::attr::{SignedInt, UnsignedInt, ReprExtern, ReprInt};
 use syntax::codemap::Span;
 
-use rustc::middle::ty::*;
-use rustc::middle::def_id::DefId;
+use rustc::ty::*;
+use rustc::hir::def_id::DefId;
 use rustc::lint::{LintContext, LateContext, Level};
 
 declare_lint!(pub BAD_CXX_TYPE, Warn, "Unable to translate type to C++");
@@ -255,20 +255,18 @@ impl TypeName {
 fn explode_path(tcx: &TyCtxt, defid: DefId) -> (String, String, String, String) {
     let mut ns_before = String::new();
     let mut ns_after = String::new();
-    let mut name = String::new();
     let mut path = format!("::rs::");
 
-    tcx.with_path(defid, |segs| {
-        let mut segs_vec: Vec<_> = segs.map(|x| x.name()).collect();
+    let mut segs_vec : Vec<_> = tcx.def_path(defid).data.iter().map(|x| x.data.to_string()).collect();
+    // let mut segs_vec: Vec<_> = segs.map(|x| x.data.to_string()).collect();
 
-        name = format!("{}", segs_vec.pop().unwrap().as_str());
-        for seg in segs_vec {
-            ns_before.push_str(&format!("namespace {} {{", seg.as_str()));
-            ns_after.push_str("}\n");
-            path.push_str(&format!("{}::", seg.as_str()));
-        }
-        path.push_str(&name);
-    });
+    let name = format!("{}", segs_vec.pop().unwrap().as_str());
+    for seg in segs_vec {
+        ns_before.push_str(&format!("namespace {} {{", seg.as_str()));
+        ns_after.push_str("}\n");
+        path.push_str(&format!("{}::", seg.as_str()));
+    }
+    path.push_str(&name);
 
     (ns_before, ns_after, name, path)
 }
@@ -449,9 +447,12 @@ fn cpp_type_of_internal<'tcx>(td: &mut TypeData,
 
                 defn.push_str(" {\n");
                 for variant in &edef.variants {
+                    // Erase the type of the disr_val such that the type suffix is not written
+                    // XXX: Hacky
+                    let val = variant.disr_val.erase_type();
                     defn.push_str(&format!("    {} = {},\n",
                                            variant.name.as_str(),
-                                           variant.disr_val));
+                                           val));
                 }
                 defn.push_str("};");
 

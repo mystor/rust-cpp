@@ -7,8 +7,8 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::ffi::OsString;
 
-use rustc_front::hir::Expr;
-use rustc_front::hir::Expr_::*;
+use rustc::hir::Expr;
+use rustc::hir::Expr_::*;
 use syntax::ptr::P;
 use syntax::errors;
 

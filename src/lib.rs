@@ -7,9 +7,6 @@ extern crate syntax;
 extern crate rustc;
 
 #[macro_use]
-extern crate rustc_front;
-
-#[macro_use]
 extern crate lazy_static;
 
 #[macro_use]
