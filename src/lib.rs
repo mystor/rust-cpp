@@ -16,7 +16,7 @@ use syntex::Registry;
 use syntex_syntax::ast;
 use syntex_syntax::ext::base::{MacResult, ExtCtxt, DummyResult, MacEager, TTMacroExpander};
 use syntex_syntax::util::small_vector::SmallVector;
-use syntex_syntax::codemap::Span;
+use syntex_syntax::codemap::{Span, FileLines};
 use syntex_syntax::parse::token;
 use syntex_syntax::abi::Abi;
 use syntex_syntax::ext::build::AstBuilder;
@@ -290,7 +290,32 @@ impl TTMacroExpander for Cpp {
             })
             .collect();
 
-        let fn_name = format!("rust_cpp_{}", Uuid::new_v4().to_simple_string());
+
+        fn escape_ident(s: &str) -> String {
+            const VALID_CHARS: &'static str =
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_123456789";
+            let mut out = String::new();
+            for c in s.chars() {
+                if VALID_CHARS.contains(c) {
+                    out.push(c);
+                } else {
+                    out.push('_')
+                }
+            }
+            out
+        }
+
+        let locinfo = match ec.parse_sess.codemap().span_to_lines(mac_span) {
+            Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
+                format!("_{}__l{}__",
+                        escape_ident(&file.name),
+                        lines[0].line_index + 1),
+            _ => String::new(),
+        };
+
+        let fn_name = format!("_generated_{}{}",
+                              locinfo,
+                              Uuid::new_v4().to_simple_string());
         let fn_ident = ast::Ident::with_empty_ctxt(token::intern(&fn_name));
 
         // extern "C" declaration of function
@@ -336,7 +361,15 @@ impl TTMacroExpander for Cpp {
                 acc
             });
 
-        let cpp_decl = format!("\n{} {}({}) {}\n", ret_cxxty, fn_name, cpp_params, body_str);
+        let line_pragma = match ec.parse_sess.codemap().span_to_lines(mac_span) {
+            Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
+                format!("#line {} {:?}", lines[0].line_index + 1, file.name),
+            _ => String::new(),
+        };
+
+        let cpp_decl = format!("\n{}\n{} {}({}) {}\n",
+                               line_pragma, ret_cxxty, fn_name,
+                               cpp_params, body_str);
         st.fndecls.push_str(&cpp_decl);
 
         // Emit the rust code into the AST
