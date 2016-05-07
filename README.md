@@ -1,95 +1,62 @@
-# rust-cpp
+# rust-cpp [stable branch]
 
-[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=master)](https://travis-ci.org/mystor/rust-cpp)
+[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=stable)](https://travis-ci.org/mystor/rust-cpp)
 
-Rust-cpp is an experimental compiler plugin for the rust programming language which enables you to write C++ code inline in your rust code.
+This is the `stable` branch of rust-cpp. It is a re-write of rust-cpp as a syntex plugin, which allows it to run on stable rust.
 
-## WARNING: Highly Unstable
-
-The API and functionality of this compiler plugin is very experimental and unstable. If you decide to use it in one of your applications, be prepared for it to break irreparably, or for the API to change dramatically, in a single dot release, or due to a rustc update.
+rust-cpp is a syntex plugin which enables you to write C++ code inline in your rust code.
 
 ## Usage
 
-Use the plugin
+> NOTE: This documentation is incomplete. Please come back later when I have
+> documented the code well enough that you don't have to just read the source :S
 
-```rust
-#![feature(plugin)]
-#![plugin(cpp)]
+> NOTE: As the stable branch of rust-cpp is not on crates.io, you will have to
+> download it and use the path manually. This will likely be changed in the
+> future.
+
+rust-cpp runs as a build plugin, so first it will need to be added to your
+project as a `build-dependency`:
+
+```toml
+[build-dependencies]
+cpp = { version = "*" }
 ```
 
-Import C++ header files
+You'll also need to be sure to add a build script to your project, if you haven't already:
 
-```rust
-cpp_include!(<memory>);
-cpp_include!(<vector>);
-cpp_include!("my_header.h");
+```toml
+[package]
+# ...
+build = "build.rs"
 ```
 
-Write C++ classes & structs
+The entry point for your module will need to be re-named, such that the real
+entry point can be automatically generated. For example, instead of `main.rs`,
+you would have `main.rs.in`. The old `main.rs` file should then be replaced with
+the following:
 
 ```rust
-cpp_header!{
-    class Foo {
-        Foo() {}
-    };
-}
+include!(concat!(env!("OUT_DIR"), "/main.rs"))
 ```
 
-Run C++ code inline in your rust code
+This tells the rust compiler when it tries to compile your module to read the
+generated output file from `rust-cpp` and treat it as though it was written as
+the project's `main.rs` file.
+
+Now, your `build.rs` should look like this:
 
 ```rust
-let foo = 1i32;
-unsafe {
-    let bar = cpp!((mut foo) -> i32 {
-        foo++;
-        std::vector<rs::i32> a;
-        a.push_back(foo);
-        a.push_back(foo + 5);
-        return a[0] + a[1];
-    });
+extern crate cpp;
 
-    assert_eq!(foo, 2);
-    assert_eq!(bar, 9);
-}
-```
-
-rust-cpp automagically generates struct declarations in C++ for your structs in rust!
-
-```rust
-#[repr(C)]
-struct Foo {
-    i: i32,
-    j: u64,
-}
+use std::env;
+use std::path::Path;
 
 fn main() {
-    unsafe {
-        let a = Foo { i: 10, j: 20 };
-        let b = cpp!((a) -> i32 {
-            return a.i;
-        });
-        assert_eq!(b, 10);
-    }
+    cpp::build(
+        Path::new("src/main.rs.in"),
+        &Path::new(&env::var("OUT_DIR").unwrap()).join("main.rs"),
+        "cpp_test",
+        |_| ());
 }
 ```
-
-You can also declare your own!
-
-```rust
-#[cpp_type = "std::vector<uint32_t>"]
-enum Vector {}
-
-fn main() {
-    unsafe {
-        let vecref = cpp!(() -> *mut Vector {
-            return new std::vector<uint32_t>;
-        });
-    }
-}
-```
-
-## Limitations
-
-1. This only runs on nightly, as it is a compiler plugin.
-2. This is very likely to break, as it depends on the current control flow mechanisms in the compiler, which are somewhat likely to change (especially when incremental compilation lands). 
-

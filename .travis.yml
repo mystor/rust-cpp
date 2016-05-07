@@ -1,5 +1,8 @@
 language: rust
-rust: nightly
+rust:
+  - stable
+  - beta
+  - nightly
 sudo: false
 notifications:
   email:

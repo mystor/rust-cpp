@@ -1,0 +1,194 @@
+#[cfg(test)]
+use std::ffi::CString;
+#[cfg(test)]
+use std::ptr;
+
+cpp_include!(<cstdint>);
+cpp_include!(<cmath>);
+cpp_include!(<vector>);
+
+cpp_header!{
+    #define SOMETHING 10
+}
+
+#[test]
+fn basic_math() {
+    let a: i32 = 10;
+    let b: i32 = 20;
+
+    let cpp_result = unsafe {
+        cpp!((a "int32_t", b "int32_t") -> i32 "int32_t" {
+            int32_t c = a * 10;
+            int32_t d = b * 20;
+
+            return c + d;
+        })
+    };
+
+    assert_eq!(cpp_result, 500);
+    assert_eq!(a, 10);
+    assert_eq!(b, 20);
+}
+
+#[test]
+fn strings() {
+    let cs = CString::new(&b"Hello, World!"[..]).unwrap();
+    let mut local_cstring = cs.as_ptr();
+
+    unsafe {
+        cpp!((mut local_cstring "char*") {
+            local_cstring[3] = 'a';
+        });
+    }
+
+    assert_eq!(cs.as_bytes(), b"Helao, World!");
+}
+
+#[test]
+fn foreign_type() {
+    #[allow(dead_code)]
+    struct WeirdRustType {
+        a: Vec<u8>,
+        b: String,
+    }
+
+    let a = WeirdRustType {
+        a: Vec::new(),
+        b: String::new(),
+    };
+
+    unsafe {
+        let addr_a = &a as *const _ as usize;
+        let c_addr_a = cpp!((a "void") -> usize "uintptr_t" {
+            return reinterpret_cast<uintptr_t>(a);
+        });
+
+        assert_eq!(addr_a, c_addr_a);
+    }
+}
+
+cpp_header!{
+    struct RustStr {
+        uint8_t *data;
+        uint64_t length;
+    };
+}
+
+#[test]
+#[allow(improper_ctypes)]
+fn slice_repr() {
+    let s: &[u8] = b"hey_there";
+
+    unsafe {
+        let out = cpp!((s "RustStr") -> &'static [u8] "RustStr" {
+            RustStr result = { s.data, 4 };
+            return result;
+        });
+
+        // out now contains a reference to the contents of the string s,
+        // but only the first 4 bytes.
+        assert_eq!(out, b"hey_");
+    }
+}
+
+#[cfg(test)]
+mod inner;
+
+#[test]
+fn inner_module() {
+    let x = inner::inner();
+    assert_eq!(x, 10);
+}
+
+#[test]
+fn c_std_lib() {
+    let num1: f32 = 10.4;
+    let num2: f32 = 12.5;
+
+    unsafe {
+        let res = cpp!((num1 "float", num2 "float") -> f32 "float" {
+            return sqrt(num1) + cbrt(num2);
+        });
+
+        let res_rs = num1.sqrt() + num2.cbrt();
+
+        assert!((res - res_rs).abs() < 0.001);
+    }
+}
+
+#[test]
+fn c_vector() {
+    enum CppVec {}
+
+    unsafe {
+        let mut cpp_vector = cpp!(() -> *const CppVec "std::vector<uint32_t>*" {
+            auto vec = new std::vector<uint32_t>;
+            vec->push_back(10);
+            return vec;
+        });
+
+        let result = cpp!((mut cpp_vector "std::vector<uint32_t>*") -> bool "uint8_t" {
+            uint32_t first_element = (*cpp_vector)[0];
+            delete cpp_vector;
+            cpp_vector = nullptr;
+            return first_element == 10;
+        });
+
+        assert!(result);
+        assert_eq!(cpp_vector, ptr::null());
+    }
+}
+
+cpp_header!{
+    enum class Foo {
+        Apple,
+        Pear,
+        Peach,
+        Cucumber,
+    };
+}
+
+// XXX: These types of things working with types shared across C++ and rust are inconvenient now
+// XXX: Potentially add utility annotations on enums and structs which make them visible
+// XXX: to C++ code.
+#[test]
+fn basic_enum() {
+    #[repr(C)]
+    #[allow(dead_code)]
+    #[derive(PartialEq, Eq, Debug)]
+    enum Foo {
+        Apple,
+        Pear,
+        Peach,
+        Cucumber,
+    }
+
+    let foo = Foo::Apple;
+    let bar = Foo::Peach;
+    let quxx = Foo::Cucumber;
+
+    unsafe {
+        let success = cpp!((foo "Foo", bar "Foo", quxx "Foo") -> bool "uint8_t" {
+            return foo == Foo::Apple && bar == Foo::Peach && quxx == Foo::Cucumber;
+        });
+
+        assert!(success);
+
+        let returned_enum = cpp!(() -> Foo "Foo" {
+            return Foo::Cucumber;
+        });
+        assert_eq!(returned_enum, Foo::Cucumber);
+    }
+}
+
+cpp_header! {
+    #define SOME_CONSTANT 10
+}
+
+#[test]
+fn header() {
+    unsafe {
+        let c = cpp!(() -> i32 "uint32_t" { return SOME_CONSTANT; });
+        assert_eq!(c, 10);
+    }
+}
