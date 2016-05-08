@@ -5,7 +5,6 @@ authors = ["Michael Layzell <michael@thelayzells.com>"]
 build = "build.rs"
 
 [build-dependencies]
-syntex = { version = "^0.31.0" }
-cpp = { version = "*", path = "../" }
+cpp = { path = "../" }
 
 

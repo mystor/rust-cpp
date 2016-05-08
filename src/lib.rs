@@ -315,7 +315,7 @@ impl TTMacroExpander for Cpp {
 
         let fn_name = format!("_generated_{}{}",
                               locinfo,
-                              Uuid::new_v4().to_simple_string());
+                              Uuid::new_v4().simple().to_string());
         let fn_ident = ast::Ident::with_empty_ctxt(token::intern(&fn_name));
 
         // extern "C" declaration of function
