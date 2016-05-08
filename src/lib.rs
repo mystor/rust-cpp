@@ -23,6 +23,56 @@ use syntex_syntax::ext::build::AstBuilder;
 
 use uuid::Uuid;
 
+const RS_NAMESPACE: &'static str = r#"
+#include <cstdint>
+
+namespace rs {
+  template<typename T>
+  struct Slice {
+    T* data;
+    uintptr_t len;
+  };
+
+  struct Trait {
+    void* data;
+    void* vtable;
+  };
+
+  typedef int8_t i8;
+  static_assert(sizeof(i8) == 1, "int is the right size");
+  typedef int16_t i16;
+  static_assert(sizeof(i16) == 2, "int is the right size");
+  typedef int32_t i32;
+  static_assert(sizeof(i32) == 4, "int is the right size");
+  typedef int64_t i64;
+  static_assert(sizeof(i64) == 8, "int is the right size");
+  typedef intptr_t isize;
+
+  typedef uint8_t u8;
+  static_assert(sizeof(u8) == 1, "int is the right size");
+  typedef uint16_t u16;
+  static_assert(sizeof(u16) == 2, "int is the right size");
+  typedef uint32_t u32;
+  static_assert(sizeof(u32) == 4, "int is the right size");
+  typedef uint64_t u64;
+  static_assert(sizeof(u64) == 8, "int is the right size");
+  typedef uintptr_t usize;
+
+  typedef float f32;
+  static_assert(sizeof(f32) == 4, "float is the right size");
+  typedef double f64;
+  static_assert(sizeof(f64) == 8, "float is the right size");
+
+  typedef u8 bool_;
+  static_assert(sizeof(bool_) == 1, "booleans are the right size");
+
+  typedef uint32_t char_;
+  static_assert(sizeof(char_) == 4, "char is the right size");
+
+  typedef Slice<u8> str;
+}
+"#;
+
 /// Expand the cpp! macros in file src, placing the resulting rust file in dst.
 ///
 /// C++ code will be generated and built based on the information parsed from
@@ -82,6 +132,7 @@ impl CodeGen {
         let state = self.state.borrow();
         let code = String::from_iter([
             "// This is machine generated code, created by rust-cpp\n",
+            RS_NAMESPACE,
             &state.includes,
             &state.headers,
             "extern \"C\" {\n",

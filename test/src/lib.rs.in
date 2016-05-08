@@ -67,21 +67,14 @@ fn foreign_type() {
     }
 }
 
-cpp_header!{
-    struct RustStr {
-        uint8_t *data;
-        uint64_t length;
-    };
-}
-
 #[test]
 #[allow(improper_ctypes)]
 fn slice_repr() {
     let s: &[u8] = b"hey_there";
 
     unsafe {
-        let out = cpp!((s "RustStr") -> &'static [u8] "RustStr" {
-            RustStr result = { s.data, 4 };
+        let out = cpp!((s "rs::Slice<rs::u8>") -> &'static [u8] "rs::Slice<rs::u8>" {
+            rs::Slice<rs::u8> result = { s.data, 4 };
             return result;
         });
 
@@ -140,7 +133,7 @@ fn c_vector() {
 }
 
 cpp_header!{
-    enum class Foo {
+    enum Foo {
         Apple,
         Pear,
         Peach,
@@ -169,13 +162,13 @@ fn basic_enum() {
 
     unsafe {
         let success = cpp!((foo "Foo", bar "Foo", quxx "Foo") -> bool "uint8_t" {
-            return foo == Foo::Apple && bar == Foo::Peach && quxx == Foo::Cucumber;
+            return foo == Apple && bar == Peach && quxx == Cucumber;
         });
 
         assert!(success);
 
         let returned_enum = cpp!(() -> Foo "Foo" {
-            return Foo::Cucumber;
+            return Cucumber;
         });
         assert_eq!(returned_enum, Foo::Cucumber);
     }
