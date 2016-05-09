@@ -20,6 +20,7 @@ use syntex_syntax::codemap::{Span, FileLines};
 use syntex_syntax::parse::token;
 use syntex_syntax::abi::Abi;
 use syntex_syntax::ext::build::AstBuilder;
+use syntex_syntax::ptr::P;
 
 use uuid::Uuid;
 
@@ -153,32 +154,142 @@ struct State {
     fndecls: String,
 }
 
+fn inner_text<'cx>(ec: &'cx mut ExtCtxt, tts: &[ast::TokenTree]) -> String {
+    if tts.len() == 0 {
+        return String::new();
+    }
+
+    let span = Span {
+        lo: tts.first().unwrap().get_span().lo,
+        hi: tts.last().unwrap().get_span().hi,
+        expn_id: tts.first().unwrap().get_span().expn_id,
+    };
+
+    ec.parse_sess.codemap().span_to_snippet(span).unwrap_or(String::new())
+}
+
+fn get_tt_braced_text<'cx>(ec: &'cx mut ExtCtxt, tt: ast::TokenTree) -> Option<String> {
+    match tt {
+        ast::TokenTree::Delimited(span, ref del) =>
+            if del.open_token() != token::OpenDelim(token::Brace) {
+                None
+            } else {
+                ec.parse_sess.codemap().span_to_snippet(span).ok()
+            },
+        _ => None,
+    }
+}
+
+fn str_to_ident(s: &str) -> ast::Ident {
+    ast::Ident::with_empty_ctxt(token::intern(s))
+}
+
+fn escape_ident(s: &str) -> String {
+    const VALID_CHARS: &'static str =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_123456789";
+    let mut out = String::new();
+    for c in s.chars() {
+        if VALID_CHARS.contains(c) {
+            out.push(c);
+        } else {
+            out.push('_')
+        }
+    }
+    out
+}
+
+struct CppParam {
+    rs: P<ast::Ty>,
+    cpp: String,
+    name: String,
+}
+
+struct CppFunc {
+    ident: ast::Ident,
+    rs: ast::ForeignMod,
+    cpp: String,
+}
+
+fn make_shared_function<'cx>(ec: &'cx mut ExtCtxt,
+                             name_hint: &str,
+                             span: Span,
+                             body: String,
+                             params: &[CppParam],
+                             cpp_ret: String,
+                             rs_ret: P<ast::Ty>) -> CppFunc {
+    // Generate a unique name for the extern C function. This name shoukd
+    // not conflict with anything
+    let locinfo = match ec.parse_sess.codemap().span_to_lines(span) {
+        Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
+            format!("_{}__l{}__",
+                    escape_ident(&file.name),
+                    lines[0].line_index + 1),
+        _ => String::new(),
+    };
+    let fn_name = format!("_{}_{}{}", name_hint, locinfo,
+                          Uuid::new_v4().simple().to_string());
+    let fn_ident = ast::Ident::with_empty_ctxt(token::intern(&fn_name));
+
+    // Create the ast::ForeignMod for the rust side
+    let rs_params: Vec<_> = params.iter()
+        .map(|p| ec.arg(span, str_to_ident(&p.name), p.rs.clone()))
+        .collect();
+
+    let foreign_mod = ast::ForeignMod {
+        abi: Abi::C,
+        items: vec![ast::ForeignItem {
+            ident: fn_ident.clone(),
+            attrs: Vec::new(),
+            node: ast::ForeignItemKind::Fn(ec.fn_decl(rs_params, rs_ret),
+                                           ast::Generics::default()),
+            id: ast::DUMMY_NODE_ID,
+            span: span,
+            vis: ast::Visibility::Inherited,
+        }],
+    };
+
+    // Create the source for the C++ side
+    let cpp_params = params.iter()
+        .fold(String::new(), |mut acc, p| {
+            if !acc.is_empty() {
+                acc.push_str(", ");
+            }
+            acc.push_str(&p.cpp);
+            acc.push_str(" ");
+            acc.push_str(&p.name);
+            acc
+        });
+
+    let line_pragma = match ec.parse_sess.codemap().span_to_lines(span) {
+        Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
+            format!("#line {} {:?}", lines[0].line_index + 1, file.name),
+        _ => String::new(),
+    };
+
+    let cpp_decl = format!("\n{}\n{} {}({}) {}\n",
+                           line_pragma, cpp_ret, fn_name,
+                           cpp_params, body);
+
+    CppFunc {
+        ident: fn_ident,
+        rs: foreign_mod,
+        cpp: cpp_decl,
+    }
+}
+
 // Macro expander implementations
 
 struct CppInclude(Rc<RefCell<State>>);
 impl TTMacroExpander for CppInclude {
     fn expand<'cx>(&self,
                    ec: &'cx mut ExtCtxt,
-                   mac_span: Span,
+                   _: Span,
                    tts: &[ast::TokenTree])
                    -> Box<MacResult+'cx>
     {
+        let inner = inner_text(ec, tts);
+
         let mut st = self.0.borrow_mut();
-
-        if tts.len() == 0 {
-            ec.span_err(mac_span, "unexpected empty cpp_include!");
-            return DummyResult::any(mac_span);
-        }
-
-        // Get the span of the tokens passed to the macro
-        let span = Span {
-            lo: tts.first().unwrap().get_span().lo,
-            hi: tts.last().unwrap().get_span().hi,
-            expn_id: mac_span.expn_id,
-        };
-
-        // Add the text from that span as an include to the headers
-        let inner = ec.parse_sess.codemap().span_to_snippet(span).unwrap();
         st.includes.push_str("\n#include ");
         st.includes.push_str(&inner);
         st.includes.push_str("\n");
@@ -191,24 +302,13 @@ struct CppHeader(Rc<RefCell<State>>);
 impl TTMacroExpander for CppHeader {
     fn expand<'cx>(&self,
                    ec: &'cx mut ExtCtxt,
-                   mac_span: Span,
+                   _: Span,
                    tts: &[ast::TokenTree])
                    -> Box<MacResult+'cx>
     {
+        let inner = inner_text(ec, tts);
+
         let mut st = self.0.borrow_mut();
-
-        if tts.len() == 0 {
-            ec.span_err(mac_span, "unexpected empty cpp_header!");
-            return DummyResult::any(mac_span);
-        }
-
-        let span = Span {
-            lo: tts.first().unwrap().get_span().lo,
-            hi: tts.last().unwrap().get_span().hi,
-            expn_id: mac_span.expn_id,
-        };
-
-        let inner = ec.parse_sess.codemap().span_to_snippet(span).unwrap();
         st.headers.push_str("\n");
         st.headers.push_str(&inner);
         st.headers.push_str("\n");
@@ -227,7 +327,9 @@ impl TTMacroExpander for Cpp {
     {
         let mut st = self.0.borrow_mut();
         let mut parser = ec.new_parser_from_tts(tts);
-        let mut captured_idents = Vec::new();
+
+        let mut params = Vec::new();
+        let mut args = Vec::new();
 
         // Parse the identifier list
         match parser.parse_token_tree().ok() {
@@ -238,10 +340,42 @@ impl TTMacroExpander for Cpp {
                         break;
                     }
 
-                    let mutable = parser.parse_mutability().unwrap_or(ast::Mutability::Immutable);
+                    let mutable = parser.parse_mutability()
+                        .unwrap_or(ast::Mutability::Immutable);
+                    let constness = if mutable == ast::Mutability::Mutable { "" } else { "const" };
                     let ident = parser.parse_ident().unwrap();
-                    let cxxty = (*parser.parse_str().unwrap().0).to_owned();
-                    captured_idents.push((ident, mutable, cxxty));
+                    let cppty = match &*parser.parse_str().unwrap().0 {
+                        "void" => format!("{} void* ", constness),
+                        x => format!("{} {}& ", constness, x),
+                    };
+                    let rsty = ec.ty_ptr(mac_span,
+                                         ec.ty_ident(mac_span,
+                                                     ast::Ident::with_empty_ctxt(
+                                                         token::intern("u8"))),
+                                         mutable);
+
+                    params.push(CppParam {
+                        rs: rsty.clone(),
+                        cpp: cppty,
+                        name: ident.name.as_str().to_string(),
+                    });
+
+                    // Build the rust call argument
+                    let addr_of = if mutable == ast::Mutability::Immutable {
+                        ec.expr_addr_of(mac_span,
+                                        ec.expr_ident(mac_span, ident.clone()))
+                    } else {
+                        ec.expr_mut_addr_of(mac_span,
+                                            ec.expr_ident(mac_span,
+                                                          ident.clone()))
+                    };
+                    args.push(ec.expr_cast(mac_span,
+                                           ec.expr_cast(mac_span,
+                                                        addr_of,
+                                                        ec.ty_ptr(mac_span,
+                                                                  ec.ty_infer(mac_span),
+                                                                  mutable)),
+                                           rsty));
 
                     if !parser.eat(&token::Comma) {
                         break;
@@ -284,144 +418,37 @@ impl TTMacroExpander for Cpp {
 
         // Read in the body
         let body_tt = parser.parse_token_tree().unwrap();
+        let body_str = match get_tt_braced_text(ec, body_tt) {
+            Some(x) => x,
+            None => {
+                ec.span_err(mac_span, "cpp! body must be surrounded by `{}`");
+                return DummyResult::expr(mac_span);
+            }
+        };
         parser.expect(&token::Eof).unwrap();
 
-        // Extract the string body of the c++ code
-        let body_str = match body_tt {
-            ast::TokenTree::Delimited(span, ref del) => {
-                if del.open_token() != token::OpenDelim(token::Brace) {
-                    ec.span_err(span, "cpp! body must be surrounded by `{}`");
-                    return DummyResult::expr(span);
-                }
+        // Build the shared function
+        let func = make_shared_function(ec,
+                                        "cpp_generated",
+                                        mac_span,
+                                        body_str,
+                                        &params,
+                                        ret_cxxty,
+                                        ret_ty);
 
-                ec.parse_sess.codemap().span_to_snippet(span).unwrap()
-            }
-            _ => {
-                ec.span_err(mac_span, "cpp! body must be a block surrounded by `{}`");
-                return DummyResult::expr(body_tt.get_span());
-            }
-        };
+        // Add the function decl to the string output
+        st.fndecls.push_str(&func.cpp);
 
-        // Generate the rust parameters and arguments
-        let params: Vec<_> = captured_idents.iter()
-            .map(|&(ref id, mutable, _)| {
-                let arg_ty = ec.ty_ptr(mac_span,
-                                       ec.ty_ident(mac_span,
-                                                   ast::Ident::with_empty_ctxt(
-                                                       token::intern("u8"))),
-                                       mutable);
-                ec.arg(mac_span, id.clone(), arg_ty)
-            })
-            .collect();
-
-        let args: Vec<_> = captured_idents.iter()
-            .map(|&(ref id, mutable, _)| {
-                let arg_ty = ec.ty_ptr(mac_span,
-                                       ec.ty_ident(mac_span,
-                                                   ast::Ident::with_empty_ctxt(
-                                                       token::intern("u8"))),
-                                       mutable);
-
-                let addr_of = if mutable == ast::Mutability::Immutable {
-                    ec.expr_addr_of(mac_span,
-                                    ec.expr_ident(mac_span, id.clone()))
-                } else {
-                    ec.expr_mut_addr_of(mac_span,
-                                        ec.expr_ident(mac_span,
-                                                      id.clone()))
-                };
-
-                ec.expr_cast(mac_span,
-                             ec.expr_cast(mac_span,
-                                          addr_of,
-                                          ec.ty_ptr(mac_span,
-                                                    ec.ty_infer(mac_span),
-                                                    mutable)),
-                             arg_ty)
-            })
-            .collect();
-
-
-        fn escape_ident(s: &str) -> String {
-            const VALID_CHARS: &'static str =
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_123456789";
-            let mut out = String::new();
-            for c in s.chars() {
-                if VALID_CHARS.contains(c) {
-                    out.push(c);
-                } else {
-                    out.push('_')
-                }
-            }
-            out
-        }
-
-        let locinfo = match ec.parse_sess.codemap().span_to_lines(mac_span) {
-            Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
-                format!("_{}__l{}__",
-                        escape_ident(&file.name),
-                        lines[0].line_index + 1),
-            _ => String::new(),
-        };
-
-        let fn_name = format!("_generated_{}{}",
-                              locinfo,
-                              Uuid::new_v4().simple().to_string());
-        let fn_ident = ast::Ident::with_empty_ctxt(token::intern(&fn_name));
-
-        // extern "C" declaration of function
-        let foreign_mod = ast::ForeignMod {
-            abi: Abi::C,
-            items: vec![ast::ForeignItem {
-                ident: fn_ident.clone(),
-                attrs: Vec::new(),
-                node: ast::ForeignItemKind::Fn(ec.fn_decl(params, ret_ty),
-                                               ast::Generics::default()),
-                id: ast::DUMMY_NODE_ID,
-                span: mac_span,
-                vis: ast::Visibility::Inherited,
-            }],
-        };
-
+        // Create a block, with the foreign module and the function call as the
+        // return value
         let exp = ec.expr_block(// Block
             ec.block(mac_span,
-                     // Extern "C" declarations for the c implemented functions
                      vec![ec.stmt_item(mac_span,
                                        ec.item(mac_span,
-                                               fn_ident.clone(),
+                                               func.ident.clone(),
                                                Vec::new(),
-                                               ast::ItemKind::ForeignMod(foreign_mod)))],
-                     Some(ec.expr_call_ident(mac_span, fn_ident.clone(), args))));
-
-        // Generate the C++ code for the function declaration
-        let cpp_params = captured_idents.into_iter()
-            .fold(String::new(), |mut acc, (id, mutable, ty)| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
-                if mutable == ast::Mutability::Immutable {
-                    acc.push_str("const ");
-                }
-                if ty == "void" {
-                    acc.push_str("void*");
-                } else {
-                    acc.push_str(&ty);
-                    acc.push_str("& ");
-                }
-                acc.push_str(&id.name.as_str());
-                acc
-            });
-
-        let line_pragma = match ec.parse_sess.codemap().span_to_lines(mac_span) {
-            Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
-                format!("#line {} {:?}", lines[0].line_index + 1, file.name),
-            _ => String::new(),
-        };
-
-        let cpp_decl = format!("\n{}\n{} {}({}) {}\n",
-                               line_pragma, ret_cxxty, fn_name,
-                               cpp_params, body_str);
-        st.fndecls.push_str(&cpp_decl);
+                                               ast::ItemKind::ForeignMod(func.rs)))],
+                     Some(ec.expr_call_ident(mac_span, func.ident.clone(), args))));
 
         // Emit the rust code into the AST
         MacEager::expr(exp)
