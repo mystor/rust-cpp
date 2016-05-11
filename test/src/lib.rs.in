@@ -185,3 +185,18 @@ fn header() {
         assert_eq!(c, 10);
     }
 }
+
+
+#[test]
+fn test_cppfn() {
+    cpp_fn! cppfn {(x : i32 "int32_t") -> u32 "uint32_t" {
+        return x < 0 ? -x : x;
+    }}
+
+    unsafe {
+        let c = cppfn(-1);
+        assert_eq!(c, 1);
+        let c = cppfn(1);
+        assert_eq!(c, 1);
+    }
+}

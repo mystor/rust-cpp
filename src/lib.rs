@@ -14,7 +14,14 @@ use std::iter::FromIterator;
 
 use syntex::Registry;
 use syntex_syntax::ast;
-use syntex_syntax::ext::base::{MacResult, ExtCtxt, DummyResult, MacEager, TTMacroExpander};
+use syntex_syntax::ext::base::{
+    MacResult,
+    ExtCtxt,
+    DummyResult,
+    MacEager,
+    TTMacroExpander,
+    IdentMacroExpander
+};
 use syntex_syntax::util::small_vector::SmallVector;
 use syntex_syntax::codemap::{Span, FileLines};
 use syntex_syntax::parse::token;
@@ -100,6 +107,7 @@ pub fn register(reg: &mut Registry) -> CodeGen {
     reg.add_macro("cpp_include", CppInclude(state.clone()));
     reg.add_macro("cpp_header", CppHeader(state.clone()));
     reg.add_macro("cpp", Cpp(state.clone()));
+    reg.add_ident_macro("cpp_fn", CppFn(state.clone()));
 
     CodeGen{ state: state }
 }
@@ -455,3 +463,124 @@ impl TTMacroExpander for Cpp {
     }
 }
 
+struct CppFn(Rc<RefCell<State>>);
+impl IdentMacroExpander for CppFn {
+    fn expand<'cx>(&self,
+                   ec: &'cx mut ExtCtxt,
+                   mac_span: Span,
+                   ident: ast::Ident,
+                   tts: Vec<ast::TokenTree>)
+                   -> Box<MacResult+'cx>
+    {
+        let mut st = self.0.borrow_mut();
+        let mut parser = ec.new_parser_from_tts(&tts);
+
+        let mut params = Vec::new();
+
+        match parser.parse_token_tree().ok() {
+            Some(ast::TokenTree::Delimited(_, ref del)) => {
+                let mut parser = ec.new_parser_from_tts(&del.tts);
+                loop {
+                    if parser.check(&token::Eof) {
+                        break;
+                    }
+
+                    let p_ident = parser.parse_ident().unwrap();
+                    parser.expect(&token::Colon).unwrap();
+                    let p_ty = parser.parse_ty().unwrap();
+
+                    let p_cpp_ty = format!("{}", parser.parse_str().unwrap().0);
+
+                    params.push(CppParam {
+                        rs: p_ty,
+                        cpp: p_cpp_ty,
+                        name: p_ident.name.as_str().to_string(),
+                    });
+
+                    if !parser.eat(&token::Comma) {
+                        break;
+                    }
+                }
+            }
+            _ => {
+                ec.span_err(mac_span, "Unexpected!");
+                return DummyResult::expr(mac_span);
+            }
+        }
+
+        // Check if we are looking at an ->
+        let (ret_ty, ret_cxxty) = if parser.eat(&token::RArrow) {
+            if let Ok(ty) = parser.parse_ty() {
+                let cxxty = match parser.parse_str() {
+                    Ok((string, _)) => string,
+                    Err(_) => {
+                        ec.span_err(mac_span, "ERROR");
+                        return DummyResult::expr(mac_span);
+                    }
+                };
+                (ty, (*cxxty).to_owned())
+            } else {
+                ec.span_err(mac_span, "Unexpected error while parsing type");
+                return DummyResult::expr(mac_span);
+            }
+        } else {
+            (ec.ty(mac_span, ast::TyKind::Tup(Vec::new())), "void".to_owned())
+        };
+
+        // Read in the body
+        let body_tt = parser.parse_token_tree().unwrap();
+        let body_str = match get_tt_braced_text(ec, body_tt) {
+            Some(x) => x,
+            None => {
+                ec.span_err(mac_span, "cpp! body must be surrounded by `{}`");
+                return DummyResult::expr(mac_span);
+            }
+        };
+        parser.expect(&token::Eof).unwrap();
+
+        // Build the shared function
+        let func = make_shared_function(ec,
+                                        &ident.name.as_str(),
+                                        mac_span,
+                                        body_str,
+                                        &params,
+                                        ret_cxxty,
+                                        ret_ty.clone());
+
+        // Add the function decl to the string output
+        st.fndecls.push_str(&func.cpp);
+
+        // Item declaring the extern "C" function
+        let extern_item = ec.item(mac_span,
+                                  func.ident.clone(),
+                                  Vec::new(),
+                                  ast::ItemKind::ForeignMod(func.rs));
+
+        // XXX: Refactor this to be shared with make_shared_function
+        let fn_params = params.iter()
+            .map(|p| ec.arg(mac_span, str_to_ident(&p.name), p.rs.clone()))
+            .collect();
+
+        let args = params.iter()
+            .map(|p| ec.expr_ident(mac_span, str_to_ident(&p.name)))
+            .collect();
+
+        let fn_item = ec.item(
+            mac_span,
+            ident,
+            Vec::new(),
+            ast::ItemKind::Fn(
+                ec.fn_decl(fn_params, ret_ty),
+                ast::Unsafety::Unsafe,
+                ast::Constness::NotConst,
+                Abi::Rust,
+                ast::Generics::default(),
+                ec.block(
+                    mac_span,
+                    vec![ec.stmt_item(mac_span, extern_item)],
+                    Some(ec.expr_call_ident(mac_span, func.ident.clone(), args)))));
+
+
+        MacEager::items(SmallVector::many(vec![fn_item]))
+    }
+}
