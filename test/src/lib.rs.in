@@ -189,6 +189,7 @@ fn header() {
 
 #[test]
 fn test_cppfn() {
+    #[inline]
     cpp_fn! cppfn {(x : i32 "int32_t") -> u32 "uint32_t" {
         return x < 0 ? -x : x;
     }}
@@ -200,3 +201,4 @@ fn test_cppfn() {
         assert_eq!(c, 1);
     }
 }
+

@@ -581,6 +581,6 @@ impl IdentMacroExpander for CppFn {
                     Some(ec.expr_call_ident(mac_span, func.ident.clone(), args)))));
 
 
-        MacEager::items(SmallVector::many(vec![fn_item]))
+        MacEager::items(SmallVector::one(fn_item))
     }
 }
