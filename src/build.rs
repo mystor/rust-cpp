@@ -88,7 +88,7 @@ pub fn mk_macro<F>(name: &str, extension: F) -> NamedSyntaxExtension
     (name, syntax_extension)
 }
 
-pub fn build<F>(src: &Path, name: &str, configure: F)
+pub fn build<P: AsRef<Path>, F>(src: P, name: &str, configure: F)
     where F: for<'a> FnOnce(&'a mut gcc::Config)
 {
     // This must be a Rc, such that it may be referred to by the macro handler
@@ -106,7 +106,7 @@ pub fn build<F>(src: &Path, name: &str, configure: F)
         let sess = parse::ParseSess::new();
 
         let krate = parse::parse_crate_from_file(
-            src,
+            src.as_ref(),
             Vec::new(),
             &sess).unwrap();
 
