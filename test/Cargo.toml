@@ -7,4 +7,7 @@ build = "build.rs"
 [build-dependencies]
 cpp = { path = "../" }
 
+[dependencies]
+cpp = { path = "../" }
+
 

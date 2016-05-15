@@ -10,7 +10,5 @@ license = "MPL-2.0"
 keywords = ["c", "cxx", "cpp", "ffi", "syntex", "plugin"]
 
 [dependencies]
-uuid = { version = "0.2", features = ["v4"] }
 gcc = "0.3"
-syntex = "0.32"
 syntex_syntax = "0.32"

@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate syntex_syntax;
-extern crate syntex;
-extern crate uuid;
 extern crate gcc;
 
 use std::cell::RefCell;
@@ -12,7 +10,6 @@ use std::env;
 use std::path::Path;
 use std::iter::FromIterator;
 
-use syntex::Registry;
 use syntex_syntax::ast;
 use syntex_syntax::ext::base::{
     MacResult,
@@ -20,16 +17,79 @@ use syntex_syntax::ext::base::{
     DummyResult,
     MacEager,
     TTMacroExpander,
-    IdentMacroExpander
+    NamedSyntaxExtension,
+    SyntaxExtension,
 };
 use syntex_syntax::util::small_vector::SmallVector;
-use syntex_syntax::codemap::{Span, FileLines};
-use syntex_syntax::parse::token;
-use syntex_syntax::abi::Abi;
-use syntex_syntax::ext::build::AstBuilder;
-use syntex_syntax::ptr::P;
+use syntex_syntax::codemap::{Span, FileLines, SpanSnippetError};
+use syntex_syntax::parse::{self, token};
+use syntex_syntax::parse::token::{Token, keywords};
+use syntex_syntax::ext::expand;
+use syntex_syntax::feature_gate;
+use syntex_syntax::parse::{PResult, parser, common};
 
-use uuid::Uuid;
+// Rust code generation
+#[macro_export]
+macro_rules! cpp {
+    // Finished
+    () => {};
+
+    // Parse toplevel #include macros
+    (#include < $i:ident > $($rest:tt)*) => {cpp!{$($rest)*}};
+    (#include $l:tt $($rest:tt)*) => {cpp!{$($rest)*}};
+
+    // Parse toplevel raw macros
+    (raw $body:tt $($rest:tt)*) => {cpp!{$($rest)*}};
+
+    // Parse parameters
+    (CPP_PARAM $name:ident : $t:ty as $cppt:tt) => {
+        $name: $t
+    };
+    (CPP_PARAM $name:ident : $t:ty as $cppt:tt , $($rest:tt)*) => {
+        $name: $t ,
+        cpp!{CPP_PARAM $($rest)*}
+    };
+
+    // Parse function declarations
+    ($(#[$m:meta])*
+     fn $id:ident ( $($name:ident : $t:ty as $cppt:tt),* ) -> $rt:ty as $rcppt:tt $body:tt $($rest:tt)*) => {
+        extern "C" {
+            $(#[$m])*
+            fn $id ( $($name : $t),* ) -> $rt ;
+        }
+        cpp!{$($rest)*}
+    };
+    ($(#[$m:meta])*
+     fn $id:ident ( $($name:ident : $t:ty as $cppt:tt),* ) $body:tt $($rest:tt)*) => {
+        extern "C" {
+            $(#[$m])*
+            fn $id ( $($name : $t),* ) ;
+        }
+        cpp!{$($rest)*}
+    };
+
+    // Parse struct definiton
+    ($(#[$m:meta])*
+     struct $id:ident { $($i:ident : $t:ty as $cpp:tt ,)* } $($rest:tt)*) => {
+        $(#[$m])*
+        #[repr(C)]
+        struct $id {
+            $($i : $t ,)*
+        }
+        cpp!{$($rest)*}
+    };
+
+    // Parse enum definition
+    ($(#[$m:meta])*
+     enum $id:ident { $($i:ident ,)* } $($rest:tt)*) => {
+        $(#[$m])*
+        #[repr(C)]
+        enum $id {
+            $($i ,)*
+        }
+        cpp!{$($rest)*}
+    };
+}
 
 const RS_NAMESPACE: &'static str = r#"
 #include <cstdint>
@@ -81,64 +141,61 @@ namespace rs {
 }
 "#;
 
-/// Expand the cpp! macros in file src, placing the resulting rust file in dst.
-///
-/// C++ code will be generated and built based on the information parsed from
-/// these macros. Additional configuration on the C++ build can be performed in
-/// the configure function.
-pub fn build<F>(src: &Path, dst: &Path, name: &str, configure: F)
-    where F: for <'a> FnOnce(&'a mut gcc::Config)
+pub fn mk_macro<F>(name: &str, extension: F) -> NamedSyntaxExtension
+    where F: TTMacroExpander + 'static
 {
-    let mut registry = Registry::new();
-    let generator = register(&mut registry);
-    registry.expand(name, src, dst).unwrap();
-    generator.build(name, configure);
+    let name = token::intern(name);
+    let syntax_extension = SyntaxExtension::NormalTT(
+        Box::new(extension),
+        None,
+        false
+    );
+    (name, syntax_extension)
 }
 
-/// Register rust-cpp's macros onto a given syntex Registry.
-///
-/// These macros perform rust code generation, and data collection. The data
-/// which is collected by the syntax macros will be stored within the returned
-/// cpp::CodeGen struct, which can be used to then generate and build the
-/// generated C++ code.
-pub fn register(reg: &mut Registry) -> CodeGen {
+pub fn build<F>(src: &Path, name: &str, configure: F)
+    where F: for<'a> FnOnce(&'a mut gcc::Config)
+{
+    // This must be a Rc, such that it may be referred to by the macro handler
     let state: Rc<RefCell<State>> = Default::default();
 
-    reg.add_macro("cpp_include", CppInclude(state.clone()));
-    reg.add_macro("cpp_header", CppHeader(state.clone()));
-    reg.add_macro("cpp", Cpp(state.clone()));
-    reg.add_ident_macro("cpp_fn", CppFn(state.clone()));
-
-    CodeGen{ state: state }
-}
-
-#[must_use]
-#[derive(Debug)]
-pub struct CodeGen {
-    state: Rc<RefCell<State>>,
-}
-
-impl CodeGen {
-    /// Build and link the C++ code. The configure function is passed a
-    /// gcc::Config object, which can be configured before the module is built,
-    /// such that additional options can be easily passed.
-    pub fn build<F>(self, name: &str, configure: F)
-        where F: for <'a> FnOnce(&'a mut gcc::Config)
+    // Run the syntax extension through syntex_syntax, to parse out the
+    // information stored in the macro invocations
     {
-        let file = Path::new(&env::var("OUT_DIR").unwrap())
-            .join(&format!("{}.cpp", name));
-        self.codegen(&file);
+        // Create the syntax extensions
+        let syntax_exts = vec![
+            mk_macro("cpp", Cpp(state.clone())),
+        ];
 
-        let mut config = gcc::Config::new();
-        config.cpp(true).file(file);
-        configure(&mut config);
-        config.compile(&format!("lib{}.a", name));
+        // Run the expanders on the crate
+        let sess = parse::ParseSess::new();
+
+        let krate = parse::parse_crate_from_file(
+            src,
+            Vec::new(),
+            &sess).unwrap();
+
+        let features = feature_gate::get_features(
+            &sess.span_diagnostic,
+            &krate);
+
+        let mut ecfg = expand::ExpansionConfig::default(name.to_string());
+        ecfg.features = Some(&features);
+
+        let mut gated_cfgs = Vec::new();
+        let ecx = ExtCtxt::new(&sess, Vec::new(), ecfg, &mut gated_cfgs);
+
+        expand::expand_crate(ecx, Vec::new(), syntax_exts, krate);
     }
 
-    /// Generate the C++ code, without building it. The code will be output
-    /// to the file located at `file`
-    pub fn codegen(self, file: &Path) {
-        let state = self.state.borrow();
+    let out_dir = env::var("OUT_DIR")
+        .expect("Environment Variable OUT_DIR must be set");
+    let file = Path::new(&out_dir)
+        .join(&format!("{}.cpp", name));
+
+    // Generate the output code
+    {
+        let state = state.borrow();
         let code = String::from_iter([
             "// This is machine generated code, created by rust-cpp\n",
             RS_NAMESPACE,
@@ -150,8 +207,16 @@ impl CodeGen {
         ].iter().cloned());
 
         // Write out the file
-        let mut f = File::create(file).unwrap();
+        let mut f = File::create(&file).unwrap();
         f.write_all(code.as_bytes()).unwrap();
+    }
+
+    // Invoke gcc to build the library.
+    {
+        let mut config = gcc::Config::new();
+        config.cpp(true).file(file);
+        configure(&mut config);
+        config.compile(&format!("lib{}.a", name));
     }
 }
 
@@ -162,6 +227,456 @@ struct State {
     fndecls: String,
 }
 
+fn span_snippet<'s>(ec: &mut ExtCtxt<'s>, span: Span) -> PResult<'s, String> {
+    match ec.parse_sess.codemap().span_to_snippet(span) {
+        Err(SpanSnippetError::IllFormedSpan(..)) =>
+            fatal(ec, span, "Unexpected ill-formed span"),
+        Err(SpanSnippetError::DistinctSources(..)) =>
+            fatal(ec, span, "Unexpected span across distinct sources"),
+        Err(SpanSnippetError::MalformedForCodemap(..)) =>
+            fatal(ec, span, "Unexpected malformed span for codemap"),
+        Err(SpanSnippetError::SourceNotAvailable{ref filename}) =>
+            fatal(ec, span, &format!("Unexpected unavaliable source: {}", filename)),
+        Ok(v) => Ok(v),
+    }
+}
+
+fn fatal<'s, T>(ec: &mut ExtCtxt<'s>, span: Span, msg: &str) -> PResult<'s, T> {
+    Err(ec.struct_span_fatal(span, msg))
+}
+
+fn line_pragma(ec: &mut ExtCtxt, span: Span) -> String {
+    match ec.parse_sess.codemap().span_to_lines(span) {
+        Ok(FileLines{ref file, ref lines}) if !lines.is_empty() =>
+            format!("#line {} {:?}\n", lines[0].line_index + 1, file.name),
+        _ => String::new(),
+    }
+}
+
+fn read_code_block<'s>(ec: &mut ExtCtxt<'s>,
+                       parser: &mut parser::Parser<'s>)
+                       -> PResult<'s, (Span, String)> {
+    match try!(parser.parse_token_tree()) {
+        ast::TokenTree::Token(span, token::Literal(token::Str_(s), _)) |
+        ast::TokenTree::Token(span, token::Literal(token::StrRaw(s, _), _)) => {
+            let s = ast::Ident::with_empty_ctxt(s).name.as_str();
+            Ok((span, s.to_string()))
+        }
+        ast::TokenTree::Delimited(span, ref del) if del.delim == token::Brace => {
+            if del.tts.len() > 0 {
+                let span = Span {
+                    lo: del.tts.first().unwrap().get_span().lo,
+                    hi: del.tts.last().unwrap().get_span().hi,
+                    expn_id: del.tts.first().unwrap().get_span().expn_id,
+                };
+
+                Ok((span, try!(span_snippet(ec, span))))
+            } else {
+                return fatal(ec, span, "Unexpected empty raw block")
+            }
+        }
+        tt => return fatal(ec, tt.get_span(), "Unexpected token while parsing import")
+    }
+}
+
+fn expand_include<'s>(ec: &mut ExtCtxt<'s>,
+                      parser: &mut parser::Parser<'s>,
+                      st: &mut State,
+                      _: Span)
+                      -> PResult<'s, ()> {
+    let (span, text) = match try!(parser.parse_token_tree()) {
+        // < foo >
+        ast::TokenTree::Token(lo_span, Token::Lt) => {
+            let hi;
+            loop {
+                match try!(parser.parse_token_tree()) {
+                    ast::TokenTree::Token(hi_span, Token::Gt) => {
+                        hi = hi_span.hi;
+                        break;
+                    }
+                    ast::TokenTree::Token(span, Token::Eof) =>
+                        return fatal(ec, span, "Unexpected EOF while parsing import"),
+                    _ => continue,
+                }
+            }
+
+            let span = Span {
+                lo: lo_span.lo,
+                hi: hi,
+                expn_id: lo_span.expn_id,
+            };
+
+            (span, try!(span_snippet(ec, span)))
+        }
+
+        // "foo"
+        ast::TokenTree::Token(span, Token::Literal(token::Lit::Str_(_), _)) =>
+            (span, try!(span_snippet(ec, span))),
+
+        tt => return fatal(ec, tt.get_span(), "Unexpected token while parsing import")
+    };
+
+    // Add the #include statement to the output
+    st.includes.push_str(&line_pragma(ec, span));
+    st.includes.push_str(&format!("#include {}\n", text));
+
+    Ok(())
+}
+
+fn expand_raw<'s>(ec: &mut ExtCtxt<'s>,
+                  parser: &mut parser::Parser<'s>,
+                  st: &mut State,
+                  _: Span)
+                  -> PResult<'s, ()> {
+    let (span, text) = try!(read_code_block(ec, parser));
+
+    // Add the #include statement to the output
+    st.headers.push_str(&line_pragma(ec, span));
+    st.headers.push_str(&format!("{}\n", text));
+
+    Ok(())
+}
+
+fn expand_fn<'s>(ec: &mut ExtCtxt<'s>,
+                 parser: &mut parser::Parser<'s>,
+                 st: &mut State,
+                 _: Span)
+                 -> PResult<'s, ()> {
+    let mut name_args = String::new();
+
+    // Parse the function name
+    let id = try!(parser.parse_ident());
+    name_args.push_str(&id.name.as_str());
+
+    // Parse the argument list
+    let args: Vec<_> =
+        try!(parser.parse_unspanned_seq(
+            &token::OpenDelim(token::Paren),
+            &token::CloseDelim(token::Paren),
+            common::SeqSep::trailing_allowed(token::Comma),
+            |p| {
+                let name = try!(p.parse_ident());
+                try!(p.expect(&Token::Colon));
+                try!(p.parse_ty_sum());
+                try!(p.expect_keyword(keywords::As));
+                let (cppty, _) = try!(p.parse_str());
+
+                Ok(format!("{} {}", cppty, name))
+            }));
+
+    name_args.push('(');
+
+    let mut just_args = String::new();
+    for arg in args {
+        if !just_args.is_empty() {
+            just_args.push_str(", ");
+        }
+        just_args.push_str(&arg);
+    }
+    name_args.push_str(&just_args);
+    name_args.push(')');
+
+    // The actual function declaration
+    let mut func = String::new();
+
+    // Parse the return type, defaulting to 'void' if no type is provided
+    if parser.eat(&token::RArrow) {
+        // XXX: Allow ! as a return type
+        try!(parser.parse_ty());
+        try!(parser.expect_keyword(keywords::As));
+        let (cppty, _) = try!(parser.parse_str());
+        func.push_str(&cppty);
+    } else {
+        func.push_str("void");
+    }
+    func.push(' ');
+    func.push_str(&name_args);
+    func.push_str(" {\n");
+
+    // Read the body
+    let (span, code) = try!(read_code_block(ec, parser));
+    func.push_str(&code);
+    func.push_str("\n}");
+
+    // Write out the function declaration
+    st.fndecls.push_str(&line_pragma(ec, span));
+    st.fndecls.push_str(&format!("{}\n", func));
+
+    Ok(())
+}
+
+fn expand_enum<'s>(ec: &mut ExtCtxt<'s>,
+                   parser: &mut parser::Parser<'s>,
+                   st: &mut State,
+                   kw_span: Span)
+                   -> PResult<'s, ()> {
+    let mut s = format!("enum class ");
+
+    // Parse the function name
+    let id = try!(parser.parse_ident());
+    s.push_str(&id.name.as_str());
+    s.push_str(" {\n");
+
+    // Parse the argument list
+    let mut opts = String::new();
+    try!(parser.parse_unspanned_seq(
+        &token::OpenDelim(token::Brace),
+        &token::CloseDelim(token::Brace),
+        common::SeqSep::trailing_allowed(token::Comma),
+        |p| {
+            let name = try!(p.parse_ident());
+            if opts.is_empty() {
+                opts.push_str(&format!("{}", name));
+            } else {
+                opts.push_str(&format!(",\n{}", name));
+            }
+            Ok(())
+        }));
+    s.push_str(&opts);
+    s.push_str("\n};\n");
+
+    st.headers.push_str(&line_pragma(ec, kw_span));
+    st.headers.push_str(&s);
+
+    Ok(())
+}
+
+fn expand_struct<'s>(ec: &mut ExtCtxt<'s>,
+                     parser: &mut parser::Parser<'s>,
+                     st: &mut State,
+                     kw_span: Span)
+                     -> PResult<'s, ()> {
+    let mut s = format!("struct ");
+
+    // Parse the function name
+    let id = try!(parser.parse_ident());
+    s.push_str(&id.name.as_str());
+    s.push_str(" {\n");
+
+    // Parse the argument list
+    let args: Vec<_> =
+        try!(parser.parse_unspanned_seq(
+            &token::OpenDelim(token::Brace),
+            &token::CloseDelim(token::Brace),
+            common::SeqSep::trailing_allowed(token::Comma),
+            |p| {
+                let name = try!(p.parse_ident());
+                try!(p.expect(&Token::Colon));
+                try!(p.parse_ty_sum());
+                try!(p.expect_keyword(keywords::As));
+                let (cppty, _) = try!(p.parse_str());
+
+                Ok(format!("{} {};\n", cppty, name))
+            }));
+
+    for arg in args {
+        s.push_str(&arg);
+    }
+
+    s.push_str("\n};\n");
+
+    st.headers.push_str(&line_pragma(ec, kw_span));
+    st.headers.push_str(&s);
+
+    Ok(())
+}
+
+struct Cpp(Rc<RefCell<State>>);
+impl TTMacroExpander for Cpp {
+    fn expand<'cx>(&self,
+                   ec: &'cx mut ExtCtxt,
+                   mac_span: Span,
+                   tts: &[ast::TokenTree])
+                   -> Box<MacResult+'cx>
+    {
+        let mut st = self.0.borrow_mut();
+        let mut parser = ec.new_parser_from_tts(tts);
+
+        loop {
+            if parser.check(&token::Eof) {
+                break
+            }
+
+            let res = match parser.parse_token_tree() {
+                // Looking at a meta item, parse it, discarding it, and move on
+                Ok(ast::TokenTree::Token(_, Token::Pound)) => {
+                    match parser.parse_token_tree() {
+                        Ok(ast::TokenTree::Token(span, Token::Ident(ref i))) =>
+                            if i.name.as_str() == "include" {
+                                expand_include(ec, &mut parser, &mut *st, span)
+                            } else {
+                                fatal(ec, span, "Unrecognized token after #")
+                            },
+
+                        // The meta item will take the form #[...], so we can just
+                        // parse the [] as a single token tree
+                        Ok(ast::TokenTree::Delimited(..)) => Ok(()),
+                        Ok(tt) => fatal(ec, tt.get_span(), "Unrecognized token after #"),
+                        Err(e) => Err(e),
+                    }
+                }
+
+                // Looking at an identifier, check which one
+                Ok(ast::TokenTree::Token(span, Token::Ident(ref i))) => {
+                    if i.name.as_str() == "raw" {
+                        expand_raw(ec, &mut parser, &mut *st, span)
+                    } else if i.name.as_str() == "fn" {
+                        expand_fn(ec, &mut parser, &mut *st, span)
+                    } else if i.name.as_str() == "enum" {
+                        expand_enum(ec, &mut parser, &mut *st, span)
+                    } else if i.name.as_str() == "struct" {
+                        expand_struct(ec, &mut parser, &mut *st, span)
+                    } else {
+                        fatal(ec, span, "Unrecognized token")
+                    }
+                }
+
+                // Error cases
+                Err(e) => Err(e),
+                Ok(ref tt) => fatal(ec, tt.get_span(), "Unrecognized token"),
+            };
+
+            if let Err(mut e) = res {
+                e.span_note(mac_span, "While parsing cpp! macro");
+                e.emit();
+                return DummyResult::any(mac_span)
+            }
+        }
+
+        MacEager::items(SmallVector::zero())
+    }
+}
+
+/*
+
+
+        //let mut params = Vec::new();
+        //let mut args = Vec::new();
+
+        // Parse the identifier list
+        match parser.parse_token_tree().ok() {
+            Some(ast::TokenTree::Delimited(span, ref del)) => {
+                let mut parser = ec.new_parser_from_tts(&del.tts[..]);
+                loop {
+                    if parser.check(&token::Eof) {
+                        break;
+                    }
+
+                    let mutable = parser.parse_mutability()
+                        .unwrap_or(ast::Mutability::Immutable);
+                    let constness = if mutable == ast::Mutability::Mutable { "" } else { "const" };
+                    let ident = parser.parse_ident().unwrap();
+                    let cppty = match &*parser.parse_str().unwrap().0 {
+                        "void" => format!("{} void* ", constness),
+                        x => format!("{} {}& ", constness, x),
+                    };
+                    let rsty = ec.ty_ptr(mac_span,
+                                         ec.ty_ident(mac_span,
+                                                     ast::Ident::with_empty_ctxt(
+                                                         token::intern("u8"))),
+                                         mutable);
+
+                    params.push(CppParam {
+                        rs: rsty.clone(),
+                        cpp: cppty,
+                        name: ident.name.as_str().to_string(),
+                    });
+
+                    // Build the rust call argument
+                    let addr_of = if mutable == ast::Mutability::Immutable {
+                        ec.expr_addr_of(mac_span,
+                                        ec.expr_ident(mac_span, ident.clone()))
+                    } else {
+                        ec.expr_mut_addr_of(mac_span,
+                                            ec.expr_ident(mac_span,
+                                                          ident.clone()))
+                    };
+                    args.push(ec.expr_cast(mac_span,
+                                           ec.expr_cast(mac_span,
+                                                        addr_of,
+                                                        ec.ty_ptr(mac_span,
+                                                                  ec.ty_infer(mac_span),
+                                                                  mutable)),
+                                           rsty));
+
+                    if !parser.eat(&token::Comma) {
+                        break;
+                    }
+                }
+                if !parser.check(&token::Eof) {
+                    ec.span_err(span, "Unexpected token in captured identifier list");
+                    return DummyResult::expr(span);
+                }
+            }
+            Some(ref tt) => {
+                ec.span_err(tt.get_span(),
+                            "First argument to cpp! must be a list of captured identifiers");
+                return DummyResult::expr(tt.get_span());
+            }
+            None => {
+                ec.span_err(mac_span, "Unexpected empty cpp! macro invocation");
+                return DummyResult::expr(mac_span);
+            }
+        }
+
+        // Check if we are looking at an ->
+        let (ret_ty, ret_cxxty) = if parser.eat(&token::RArrow) {
+            if let Ok(ty) = parser.parse_ty() {
+                let cxxty = match parser.parse_str() {
+                    Ok((string, _)) => string,
+                    Err(_) => {
+                        ec.span_err(mac_span, "ERROR");
+                        return DummyResult::expr(mac_span);
+                    }
+                };
+                (ty, (*cxxty).to_owned())
+            } else {
+                ec.span_err(mac_span, "Unexpected error while parsing type");
+                return DummyResult::expr(mac_span);
+            }
+        } else {
+            (ec.ty(mac_span, ast::TyKind::Tup(Vec::new())), "void".to_owned())
+        };
+
+        // Read in the body
+        let body_tt = parser.parse_token_tree().unwrap();
+        let body_str = match get_tt_braced_text(ec, body_tt) {
+            Some(x) => x,
+            None => {
+                ec.span_err(mac_span, "cpp! body must be surrounded by `{}`");
+                return DummyResult::expr(mac_span);
+            }
+        };
+        parser.expect(&token::Eof).unwrap();
+
+        // Build the shared function
+        let func = make_shared_function(ec,
+                                        "cpp_generated",
+                                        mac_span,
+                                        body_str,
+                                        &params,
+                                        ret_cxxty,
+                                        ret_ty);
+
+        // Add the function decl to the string output
+        st.fndecls.push_str(&func.cpp);
+
+        // Create a block, with the foreign module and the function call as the
+        // return value
+        let exp = ec.expr_block(// Block
+            ec.block(mac_span,
+                     vec![ec.stmt_item(mac_span,
+                                       ec.item(mac_span,
+                                               func.ident.clone(),
+                                               Vec::new(),
+                                               ast::ItemKind::ForeignMod(func.rs)))],
+                     Some(ec.expr_call_ident(mac_span, func.ident.clone(), args))));
+
+        // Emit the rust code into the AST
+        MacEager::expr(exp)
+*/
+
+/*
 fn inner_text<'cx>(ec: &'cx mut ExtCtxt, tts: &[ast::TokenTree]) -> String {
     if tts.len() == 0 {
         return String::new();
@@ -584,3 +1099,4 @@ impl IdentMacroExpander for CppFn {
         MacEager::items(SmallVector::one(fn_item))
     }
 }
+*/
