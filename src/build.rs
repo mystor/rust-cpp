@@ -30,49 +30,49 @@ const RS_NAMESPACE: &'static str = r#"
 #include <cstdint>
 
 namespace rs {
-  template<typename T>
-  struct Slice {
-    T* data;
-    uintptr_t len;
-  };
+    template<typename T>
+    struct Slice {
+        T* data;
+        uintptr_t len;
+    };
 
-  struct Trait {
-    void* data;
-    void* vtable;
-  };
+    struct Trait {
+        void* data;
+        void* vtable;
+    };
 
-  typedef int8_t i8;
-  static_assert(sizeof(i8) == 1, "int is the right size");
-  typedef int16_t i16;
-  static_assert(sizeof(i16) == 2, "int is the right size");
-  typedef int32_t i32;
-  static_assert(sizeof(i32) == 4, "int is the right size");
-  typedef int64_t i64;
-  static_assert(sizeof(i64) == 8, "int is the right size");
-  typedef intptr_t isize;
+    typedef int8_t i8;
+    static_assert(sizeof(i8) == 1, "int is the right size");
+    typedef int16_t i16;
+    static_assert(sizeof(i16) == 2, "int is the right size");
+    typedef int32_t i32;
+    static_assert(sizeof(i32) == 4, "int is the right size");
+    typedef int64_t i64;
+    static_assert(sizeof(i64) == 8, "int is the right size");
+    typedef intptr_t isize;
 
-  typedef uint8_t u8;
-  static_assert(sizeof(u8) == 1, "int is the right size");
-  typedef uint16_t u16;
-  static_assert(sizeof(u16) == 2, "int is the right size");
-  typedef uint32_t u32;
-  static_assert(sizeof(u32) == 4, "int is the right size");
-  typedef uint64_t u64;
-  static_assert(sizeof(u64) == 8, "int is the right size");
-  typedef uintptr_t usize;
+    typedef uint8_t u8;
+    static_assert(sizeof(u8) == 1, "int is the right size");
+    typedef uint16_t u16;
+    static_assert(sizeof(u16) == 2, "int is the right size");
+    typedef uint32_t u32;
+    static_assert(sizeof(u32) == 4, "int is the right size");
+    typedef uint64_t u64;
+    static_assert(sizeof(u64) == 8, "int is the right size");
+    typedef uintptr_t usize;
 
-  typedef float f32;
-  static_assert(sizeof(f32) == 4, "float is the right size");
-  typedef double f64;
-  static_assert(sizeof(f64) == 8, "float is the right size");
+    typedef float f32;
+    static_assert(sizeof(f32) == 4, "float is the right size");
+    typedef double f64;
+    static_assert(sizeof(f64) == 8, "float is the right size");
 
-  typedef u8 bool_;
-  static_assert(sizeof(bool_) == 1, "booleans are the right size");
+    typedef u8 bool_;
+    static_assert(sizeof(bool_) == 1, "booleans are the right size");
 
-  typedef uint32_t char_;
-  static_assert(sizeof(char_) == 4, "char is the right size");
+    typedef uint32_t char_;
+    static_assert(sizeof(char_) == 4, "char is the right size");
 
-  typedef Slice<u8> str;
+    typedef Slice<u8> str;
 }
 "#;
 
@@ -134,10 +134,10 @@ pub fn build<P: AsRef<Path>, F>(src: P, name: &str, configure: F)
         let code = String::from_iter([
             "// This is machine generated code, created by rust-cpp\n",
             RS_NAMESPACE,
-            &state.includes,
-            &state.headers,
+            &state.includes[..],
+            &state.headers[..],
             "extern \"C\" {\n",
-            &state.fndecls,
+            &state.fndecls[..],
             "}",
         ].iter().cloned());
 
@@ -197,18 +197,14 @@ fn read_code_block<'s>(ec: &mut ExtCtxt<'s>,
             let s = ast::Ident::with_empty_ctxt(s).name.as_str();
             Ok((span, s.to_string()))
         }
-        ast::TokenTree::Delimited(span, ref del) if del.delim == token::Brace => {
-            if del.tts.len() > 0 {
-                let span = Span {
-                    lo: del.tts.first().unwrap().get_span().lo,
-                    hi: del.tts.last().unwrap().get_span().hi,
-                    expn_id: del.tts.first().unwrap().get_span().expn_id,
-                };
+        ast::TokenTree::Delimited(_, ref del) if del.delim == token::Brace => {
+            let span = Span {
+                lo: del.open_span.hi,
+                hi: del.close_span.lo,
+                expn_id: del.open_span.expn_id,
+            };
 
-                Ok((span, try!(span_snippet(ec, span))))
-            } else {
-                return fatal(ec, span, "Unexpected empty raw block")
-            }
+            Ok((span, try!(span_snippet(ec, span))))
         }
         tt => return fatal(ec, tt.get_span(), "Unexpected token while parsing import")
     }
@@ -326,12 +322,12 @@ fn expand_fn<'s>(ec: &mut ExtCtxt<'s>,
     }
     func.push(' ');
     func.push_str(&name_args);
-    func.push_str(" {\n");
+    func.push_str(" {");
 
     // Read the body
     let (span, code) = try!(read_code_block(ec, parser));
     func.push_str(&code);
-    func.push_str("\n}");
+    func.push_str("}");
 
     // Write out the function declaration
     st.fndecls.push_str(&line_pragma(ec, span));
@@ -361,9 +357,9 @@ fn expand_enum<'s>(ec: &mut ExtCtxt<'s>,
         |p| {
             let name = try!(p.parse_ident());
             if opts.is_empty() {
-                opts.push_str(&format!("{}", name));
+                opts.push_str(&format!("    {}", name));
             } else {
-                opts.push_str(&format!(",\n{}", name));
+                opts.push_str(&format!(",\n    {}", name));
             }
             Ok(())
         }));
@@ -401,14 +397,14 @@ fn expand_struct<'s>(ec: &mut ExtCtxt<'s>,
                 try!(p.expect_keyword(keywords::As));
                 let (cppty, _) = try!(p.parse_str());
 
-                Ok(format!("{} {};\n", cppty, name))
+                Ok(format!("    {} {};\n", cppty, name))
             }));
 
     for arg in args {
         s.push_str(&arg);
     }
 
-    s.push_str("\n};\n");
+    s.push_str("};\n");
 
     st.headers.push_str(&line_pragma(ec, kw_span));
     st.headers.push_str(&s);

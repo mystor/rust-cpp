@@ -39,10 +39,9 @@ cpp! {
 #[test]
 fn strings() {
     let cs = CString::new(&b"Hello, World!"[..]).unwrap();
-    let local_cstring = cs.as_ptr();
 
     unsafe {
-        strings_impl(local_cstring as *mut u8);
+        strings_impl(cs.as_ptr() as _);
     }
 
     assert_eq!(cs.as_bytes(), b"Helao, World!");
@@ -197,7 +196,7 @@ cpp! {
         #define SOME_CONSTANT 10
     }
 
-    fn return_some_constant() -> i32 as "uint32_t" {
+    fn return_some_constant() -> u32 as "uint32_t" {
         return SOME_CONSTANT;
     }
 }
@@ -207,5 +206,38 @@ fn header() {
     unsafe {
         let c = return_some_constant();
         assert_eq!(c, 10);
+    }
+}
+
+cpp! {
+    #[derive(Copy, Clone)]
+    struct S {
+        a: i32 as "int32_t",
+    }
+}
+
+#[test]
+fn derive_copy() {
+    let x = S { a: 10 };
+    let mut y = x;
+    assert_eq!(x.a, 10);
+    assert_eq!(y.a, 10);
+    y.a = 20;
+    assert_eq!(x.a, 10);
+    assert_eq!(y.a, 20);
+}
+
+cpp! {
+    raw "#define SOME_VALUE 10"
+
+    fn string_body_impl() -> i32 as "int32_t" r#"
+        return SOME_VALUE;
+    "#
+}
+
+#[test]
+fn string_body() {
+    unsafe {
+        assert_eq!(string_body_impl(), 10);
     }
 }
