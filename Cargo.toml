@@ -9,6 +9,10 @@ readme = "README.md"
 license = "MPL-2.0"
 keywords = ["c", "cxx", "cpp", "ffi", "syntex", "plugin"]
 
+[features]
+build = ["gcc", "syntex_syntax"]
+macro = []
+
 [dependencies]
-gcc = "0.3"
-syntex_syntax = "0.32"
+gcc = { version = "0.3", optional = true }
+syntex_syntax = { version = "0.32", optional = true }
