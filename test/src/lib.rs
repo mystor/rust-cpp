@@ -41,7 +41,7 @@ fn strings() {
     let cs = CString::new(&b"Hello, World!"[..]).unwrap();
 
     unsafe {
-        strings_impl(cs.as_ptr() as _);
+        strings_impl(cs.as_ptr() as *mut _);
     }
 
     assert_eq!(cs.as_bytes(), b"Helao, World!");
@@ -68,7 +68,7 @@ fn foreign_type() {
 
     unsafe {
         let addr_a = &a as *const _ as usize;
-        let c_addr_a = foreign_type_impl(&a as *const _ as _);
+        let c_addr_a = foreign_type_impl(&a as *const _ as *mut _);
 
         assert_eq!(addr_a, c_addr_a);
     }
