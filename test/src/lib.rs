@@ -169,11 +169,11 @@ cpp! {
     fn basic_enum_impl_1(foo: Foo as "Foo", bar: Foo as "Foo", quxx: Foo as "Foo")
                          -> bool as "bool"
     {
-        return foo == Foo::Apple && bar == Foo::Peach && quxx == Foo::Cucumber;
+        return foo == Apple && bar == Peach && quxx == Cucumber;
     }
 
     fn basic_enum_impl_2() -> Foo as "Foo" {
-        return Foo::Cucumber;
+        return Cucumber;
     }
 }
 
@@ -239,5 +239,37 @@ cpp! {
 fn string_body() {
     unsafe {
         assert_eq!(string_body_impl(), 10);
+    }
+}
+
+cpp! {
+    #[derive(Eq, PartialEq, Debug)]
+    #[allow(dead_code)]
+    enum class EnumClass {
+        A,
+        B,
+    }
+
+    #[derive(Eq, PartialEq, Debug)]
+    #[allow(dead_code)]
+    enum prefix EnumPrefix {
+        A,
+        B,
+    }
+
+    fn test_enum_class() -> EnumClass as "EnumClass" {
+        return EnumClass::B;
+    }
+
+    fn test_enum_prefix() -> EnumPrefix as "EnumPrefix" {
+        return EnumPrefix_B;
+    }
+}
+
+#[test]
+fn enum_class_prefix() {
+    unsafe {
+        assert_eq!(test_enum_class(), EnumClass::B);
+        assert_eq!(test_enum_prefix(), EnumPrefix::B);
     }
 }

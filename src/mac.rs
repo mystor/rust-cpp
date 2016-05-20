@@ -59,4 +59,26 @@ macro_rules! cpp {
         }
         cpp!{$($rest)*}
     };
+
+    // Parse enum class definition
+    ($(#[$m:meta])*
+     enum class $id:ident { $($i:ident ,)* } $($rest:tt)*) => {
+        $(#[$m])*
+        #[repr(C)]
+        enum $id {
+            $($i ,)*
+        }
+        cpp!{$($rest)*}
+    };
+
+    // Parse prefixed enum definition
+    ($(#[$m:meta])*
+     enum prefix $id:ident { $($i:ident ,)* } $($rest:tt)*) => {
+        $(#[$m])*
+        #[repr(C)]
+        enum $id {
+            $($i ,)*
+        }
+        cpp!{$($rest)*}
+    };
 }

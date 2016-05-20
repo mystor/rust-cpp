@@ -341,10 +341,20 @@ fn expand_enum<'s>(ec: &mut ExtCtxt<'s>,
                    st: &mut State,
                    kw_span: Span)
                    -> PResult<'s, ()> {
-    let mut s = format!("enum class ");
+    let mut s = format!("enum ");
+    let mut add_prefix = false;
 
-    // Parse the function name
-    let id = try!(parser.parse_ident());
+    // Parse the function name. If we see "class" or "prefix", then record the
+    // relevant information and parse another ident
+    let mut id = try!(parser.parse_ident());
+    if id.name.as_str() == "class" {
+        s.push_str("class ");
+        id = try!(parser.parse_ident());
+    } else if id.name.as_str() == "prefix" {
+        add_prefix = true;
+        id = try!(parser.parse_ident());
+    }
+
     s.push_str(&id.name.as_str());
     s.push_str(" {\n");
 
@@ -356,11 +366,19 @@ fn expand_enum<'s>(ec: &mut ExtCtxt<'s>,
         common::SeqSep::trailing_allowed(token::Comma),
         |p| {
             let name = try!(p.parse_ident());
-            if opts.is_empty() {
-                opts.push_str(&format!("    {}", name));
+
+            let name_str = if add_prefix {
+                format!("{}_{}", id, name)
             } else {
-                opts.push_str(&format!(",\n    {}", name));
+                format!("{}", name)
+            };
+
+            if opts.is_empty() {
+                opts.push_str("    ");
+            } else {
+                opts.push_str(",\n    ");
             }
+            opts.push_str(&name_str);
             Ok(())
         }));
     s.push_str(&opts);
