@@ -26,7 +26,10 @@ use syntex_syntax::parse::{PResult, parser, common};
 
 use gcc;
 
-const RS_NAMESPACE: &'static str = r#"
+const RUST_TYPES_HEADER: &'static str = r#"
+#ifndef _RUST_TYPES_H_
+#define _RUST_TYPES_H_
+
 #include <cstdint>
 
 namespace rs {
@@ -74,6 +77,7 @@ namespace rs {
 
     typedef Slice<u8> str;
 }
+#endif
 "#;
 
 pub fn mk_macro<F>(name: &str, extension: F) -> NamedSyntaxExtension
@@ -125,15 +129,14 @@ pub fn build<P: AsRef<Path>, F>(src: P, name: &str, configure: F)
 
     let out_dir = env::var("OUT_DIR")
         .expect("Environment Variable OUT_DIR must be set");
-    let file = Path::new(&out_dir)
-        .join(&format!("{}.cpp", name));
+    let file = Path::new(&out_dir).join(&format!("{}.cpp", name));
+    let rust_types_file = Path::new(&out_dir).join("rust_types.h");
 
     // Generate the output code
     {
         let state = state.borrow();
         let code = String::from_iter([
             "// This is machine generated code, created by rust-cpp\n",
-            RS_NAMESPACE,
             &state.includes[..],
             &state.headers[..],
             "extern \"C\" {\n",
@@ -144,6 +147,12 @@ pub fn build<P: AsRef<Path>, F>(src: P, name: &str, configure: F)
         // Write out the file
         let mut f = File::create(&file).unwrap();
         f.write_all(code.as_bytes()).unwrap();
+    }
+
+    // Write out the rust types file
+    {
+        let mut f = File::create(&rust_types_file).unwrap();
+        f.write_all(RUST_TYPES_HEADER.as_bytes()).unwrap();
     }
 
     // Invoke gcc to build the library.

@@ -8,6 +8,11 @@ extern crate cpp;
 use std::ffi::CString;
 
 cpp! {
+    // Bring in rust-types!
+    #include "rust_types.h"
+}
+
+cpp! {
     fn basic_math_impl(a: i32 as "rs::i32", b: i32 as "rs::i32") -> i32 as "rs::i32" {
         int32_t c = a * 10;
         int32_t d = b * 20;

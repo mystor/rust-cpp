@@ -95,17 +95,105 @@ cpp! {
     // wherever the cpp! block is located
     struct MyStruct {
         x: i32 as "int32_t",
-        y: *const i8 as "const char*"
+        y: *const i8 as "const char*",
     }
     
     // Define an enum which is shared between C++ and rust. In C++-land it 
-    // will be defined in the global namespace as an `enum class`. In rust, 
+    // will be defined in the global namespace as an `enum`. In rust,
     // it will be located wherever the cpp! block is located.
     enum MyEnum {
-        A,
+        A, // Known in C++ as `A`
         B,
         C,
-        D
+        D,
+    }
+
+    // Enums can also be declared as `enum class` or `enum prefix` which will
+    // cause them to be defined in C++-land as either an `enum class` or an
+    // enum with each of its members prefixed with `EnumName_`.
+    enum class MyEnumClass {
+        A, // Known in C++ as `MyEnumClass::A`
+        B,
+        C,
+        D,
+    }
+
+    enum prefix MyEnumPrefix {
+        A, // Known in C++ as `MyEnumPrefix_A`
+        B,
+        C,
+        D,
     }
 }
+```
+
+`cpp` also provides a header which may be useful for interop code. This header
+includes `<cstdint>`, which means that a sufficiently modern C++ compiler may be
+required to use it. This header, `rust_types.h`, can be included with:
+
+```rust
+cpp! {
+    #include "rust_types.h"
+}
+```
+
+It provides the `rs` namespace, which contains various type definitions for rust
+types, such as the numeric types (`rs::i8`, `rs::u64`, `rs::f32`, `rs::usize`,
+etc.), the rust slice type (`&[u8] => rs::Slice<rs::u8>`), and the rust trait
+object fat pointer type. There are also definitions for `rs::bool_`, which is
+guaranteed to be 1 byte wide, the size of a rust `bool`, and `rs::char_` which
+is the size of a rust `char`. The full body of `rust_types.h` is included below.
+
+```rust
+#ifndef _RUST_TYPES_H_
+#define _RUST_TYPES_H_
+
+#include <cstdint>
+
+namespace rs {
+    template<typename T>
+    struct Slice {
+        T* data;
+        uintptr_t len;
+    };
+
+    struct Trait {
+        void* data;
+        void* vtable;
+    };
+
+    typedef int8_t i8;
+    static_assert(sizeof(i8) == 1, "int is the right size");
+    typedef int16_t i16;
+    static_assert(sizeof(i16) == 2, "int is the right size");
+    typedef int32_t i32;
+    static_assert(sizeof(i32) == 4, "int is the right size");
+    typedef int64_t i64;
+    static_assert(sizeof(i64) == 8, "int is the right size");
+    typedef intptr_t isize;
+
+    typedef uint8_t u8;
+    static_assert(sizeof(u8) == 1, "int is the right size");
+    typedef uint16_t u16;
+    static_assert(sizeof(u16) == 2, "int is the right size");
+    typedef uint32_t u32;
+    static_assert(sizeof(u32) == 4, "int is the right size");
+    typedef uint64_t u64;
+    static_assert(sizeof(u64) == 8, "int is the right size");
+    typedef uintptr_t usize;
+
+    typedef float f32;
+    static_assert(sizeof(f32) == 4, "float is the right size");
+    typedef double f64;
+    static_assert(sizeof(f64) == 8, "float is the right size");
+
+    typedef u8 bool_;
+    static_assert(sizeof(bool_) == 1, "booleans are the right size");
+
+    typedef uint32_t char_;
+    static_assert(sizeof(char_) == 4, "char is the right size");
+
+    typedef Slice<u8> str;
+}
+#endif
 ```
