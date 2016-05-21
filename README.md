@@ -197,3 +197,11 @@ namespace rs {
 }
 #endif
 ```
+
+## Warning about Macros
+
+rust-cpp cannot identify and parse the information found in cpp! blocks which
+are generated with macros. These blocks will correctly generate rust code, but
+will not generate the corresponding C++ code, most likely causing your build to
+fail with a linker error. Do not create cpp! {} blocks with macros to avoid
+this.
