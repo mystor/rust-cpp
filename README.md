@@ -144,7 +144,7 @@ object fat pointer type. There are also definitions for `rs::bool_`, which is
 guaranteed to be 1 byte wide, the size of a rust `bool`, and `rs::char_` which
 is the size of a rust `char`. The full body of `rust_types.h` is included below.
 
-```rust
+```c++
 #ifndef _RUST_TYPES_H_
 #define _RUST_TYPES_H_
 
