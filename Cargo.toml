@@ -1,19 +1,18 @@
 [package]
 name = "cpp"
-version = "0.0.19"
+version = "0.1.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 
 description = "Write C++ code inline in your rust code!"
 repository = "https://github.com/mystor/rust-cpp"
 readme = "README.md"
 license = "MPL-2.0"
-keywords = ["c", "cxx", "cpp", "ffi"]
+keywords = ["c", "cxx", "cpp", "ffi", "syntex", "plugin"]
 
-[lib]
-name = "cpp"
-plugin = true
+[features]
+build = ["gcc", "syntex_syntax"]
+macro = []
 
 [dependencies]
-uuid = "0.1"
-lazy_static = "0.1"
-gcc = "0.3"
+gcc = { version = "0.3", optional = true }
+syntex_syntax = { version = "0.32", optional = true }
