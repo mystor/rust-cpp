@@ -1,9 +1,6 @@
-# rust-cpp [stable branch]
+# rust-cpp (now more stable than ever!)
 
-[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=stable)](https://travis-ci.org/mystor/rust-cpp)
-
-This is the `stable` branch of rust-cpp. It is a re-write, and re-design of
-rust-cpp built on syntex_syntax, allowing it to run on stable rust.
+[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=master)](https://travis-ci.org/mystor/rust-cpp)
 
 rust-cpp is a build tool & macro which enables you to write C++ code inline in
 your rust code.
