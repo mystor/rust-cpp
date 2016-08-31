@@ -1,9 +1,19 @@
-# rust-cpp (now more stable than ever!)
+# rust-cpp
 
 [![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=master)](https://travis-ci.org/mystor/rust-cpp)
+[![Build status](https://ci.appveyor.com/api/projects/status/uu76vmcrwnjqra0u/branch/master?svg=true)](https://ci.appveyor.com/project/mystor/rust-cpp/branch/master)
 
 rust-cpp is a build tool & macro which enables you to write C++ code inline in
 your rust code.
+
+> NOTE: This crate works on stable rust, but it is not stable itself. You can
+> use this version all you want, but don't be surprised when a 0.2 release is
+> made which completely breaks backwords compatibility. I view this crate as
+> more of an experiment than a product.
+
+> As the tools come into stable rust to make this more practical to use, I
+> expect that it will stabilize. Namely, I do not expect that this module will
+> have a stable-ish interface until we get a stable procedural macro system.
 
 ## Setup
 
@@ -148,17 +158,6 @@ is the size of a rust `char`. The full body of `rust_types.h` is included below.
 #include <cstdint>
 
 namespace rs {
-    template<typename T>
-    struct Slice {
-        T* data;
-        uintptr_t len;
-    };
-
-    struct Trait {
-        void* data;
-        void* vtable;
-    };
-
     typedef int8_t i8;
     static_assert(sizeof(i8) == 1, "int is the right size");
     typedef int16_t i16;
@@ -189,8 +188,6 @@ namespace rs {
 
     typedef uint32_t char_;
     static_assert(sizeof(char_) == 4, "char is the right size");
-
-    typedef Slice<u8> str;
 }
 #endif
 ```
