@@ -17,10 +17,6 @@ your rust code.
 
 ## Setup
 
-> NOTE: As the stable branch of rust-cpp is not on crates.io, you will have to
-> download it and use the path manually. This will likely be changed in the
-> future.
-
 Add `cpp` as a dependency to your project. It will need to be added both as a
 build dependency, and as a normal dependency, with different flags. You'll also
 need a `build.rs` set up for your project.
