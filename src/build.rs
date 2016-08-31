@@ -33,17 +33,6 @@ const RUST_TYPES_HEADER: &'static str = r#"
 #include <cstdint>
 
 namespace rs {
-    template<typename T>
-    struct Slice {
-        T* data;
-        uintptr_t len;
-    };
-
-    struct Trait {
-        void* data;
-        void* vtable;
-    };
-
     typedef int8_t i8;
     static_assert(sizeof(i8) == 1, "int is the right size");
     typedef int16_t i16;
@@ -74,8 +63,6 @@ namespace rs {
 
     typedef uint32_t char_;
     static_assert(sizeof(char_) == 4, "char is the right size");
-
-    typedef Slice<u8> str;
 }
 #endif
 "#;

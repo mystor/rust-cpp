@@ -79,28 +79,6 @@ fn foreign_type() {
     }
 }
 
-cpp! {
-    fn slice_repr_impl(s: &'static [u8] as "rs::Slice<rs::u8>")
-                       -> &'static [u8] as "rs::Slice<rs::u8>"
-    {
-        rs::Slice<rs::u8> result = { s.data, 4 };
-        return result;
-    }
-}
-
-#[test]
-fn slice_repr() {
-    let s: &[u8] = b"hey_there";
-
-    unsafe {
-        let out = slice_repr_impl(s);
-
-        // out now contains a reference to the contents of the string s,
-        // but only the first 4 bytes.
-        assert_eq!(out, b"hey_");
-    }
-}
-
 #[cfg(test)]
 mod inner;
 
