@@ -8,6 +8,7 @@ use std::iter::FromIterator;
 
 use syntex_syntax::ast;
 use syntex_syntax::ext::base::{
+    MacroLoader,
     MacResult,
     ExtCtxt,
     DummyResult,
@@ -23,6 +24,7 @@ use syntex_syntax::parse::token::{Token, keywords};
 use syntex_syntax::ext::expand;
 use syntex_syntax::feature_gate;
 use syntex_syntax::parse::{PResult, parser, common};
+use syntex_syntax::tokenstream::TokenTree;
 
 use gcc;
 
@@ -103,15 +105,22 @@ pub fn build<P: AsRef<Path>, F>(src: P, name: &str, configure: F)
 
         let features = feature_gate::get_features(
             &sess.span_diagnostic,
-            &krate);
+            &krate.attrs);
+
+        struct DummyMacroLoader;
+        impl MacroLoader for DummyMacroLoader{
+            fn load_crate(&mut self, _extern_crate: &ast::Item, _allows_macros: bool) -> Vec<ast::MacroDef> {
+                Vec::new()
+            }
+        }
 
         let mut ecfg = expand::ExpansionConfig::default(name.to_string());
         ecfg.features = Some(&features);
 
-        let mut gated_cfgs = Vec::new();
-        let ecx = ExtCtxt::new(&sess, Vec::new(), ecfg, &mut gated_cfgs);
+        let mut dml = DummyMacroLoader;
+        let mut ecx = ExtCtxt::new(&sess, Vec::new(), ecfg, &mut dml);
 
-        expand::expand_crate(ecx, Vec::new(), syntax_exts, krate);
+        expand::expand_crate(&mut ecx, syntax_exts, krate);
     }
 
     let out_dir = env::var("OUT_DIR")
@@ -188,12 +197,12 @@ fn read_code_block<'s>(ec: &mut ExtCtxt<'s>,
                        parser: &mut parser::Parser<'s>)
                        -> PResult<'s, (Span, String)> {
     match try!(parser.parse_token_tree()) {
-        ast::TokenTree::Token(span, token::Literal(token::Str_(s), _)) |
-        ast::TokenTree::Token(span, token::Literal(token::StrRaw(s, _), _)) => {
+        TokenTree::Token(span, token::Literal(token::Str_(s), _)) |
+        TokenTree::Token(span, token::Literal(token::StrRaw(s, _), _)) => {
             let s = ast::Ident::with_empty_ctxt(s).name.as_str();
             Ok((span, s.to_string()))
         }
-        ast::TokenTree::Delimited(_, ref del) if del.delim == token::Brace => {
+        TokenTree::Delimited(_, ref del) if del.delim == token::Brace => {
             let span = Span {
                 lo: del.open_span.hi,
                 hi: del.close_span.lo,
@@ -213,15 +222,15 @@ fn expand_include<'s>(ec: &mut ExtCtxt<'s>,
                       -> PResult<'s, ()> {
     let (span, text) = match try!(parser.parse_token_tree()) {
         // < foo >
-        ast::TokenTree::Token(lo_span, Token::Lt) => {
+        TokenTree::Token(lo_span, Token::Lt) => {
             let hi;
             loop {
                 match try!(parser.parse_token_tree()) {
-                    ast::TokenTree::Token(hi_span, Token::Gt) => {
+                    TokenTree::Token(hi_span, Token::Gt) => {
                         hi = hi_span.hi;
                         break;
                     }
-                    ast::TokenTree::Token(span, Token::Eof) =>
+                    TokenTree::Token(span, Token::Eof) =>
                         return fatal(ec, span, "Unexpected EOF while parsing import"),
                     _ => continue,
                 }
@@ -237,7 +246,7 @@ fn expand_include<'s>(ec: &mut ExtCtxt<'s>,
         }
 
         // "foo"
-        ast::TokenTree::Token(span, Token::Literal(token::Lit::Str_(_), _)) =>
+        TokenTree::Token(span, Token::Literal(token::Lit::Str_(_), _)) =>
             (span, try!(span_snippet(ec, span))),
 
         tt => return fatal(ec, tt.get_span(), "Unexpected token while parsing import")
@@ -431,7 +440,7 @@ impl TTMacroExpander for Cpp {
     fn expand<'cx>(&self,
                    ec: &'cx mut ExtCtxt,
                    mac_span: Span,
-                   tts: &[ast::TokenTree])
+                   tts: &[TokenTree])
                    -> Box<MacResult+'cx>
     {
         let mut st = self.0.borrow_mut();
@@ -444,9 +453,9 @@ impl TTMacroExpander for Cpp {
 
             let res = match parser.parse_token_tree() {
                 // Looking at a meta item, parse it, discarding it, and move on
-                Ok(ast::TokenTree::Token(_, Token::Pound)) => {
+                Ok(TokenTree::Token(_, Token::Pound)) => {
                     match parser.parse_token_tree() {
-                        Ok(ast::TokenTree::Token(span, Token::Ident(ref i))) =>
+                        Ok(TokenTree::Token(span, Token::Ident(ref i))) =>
                             if i.name.as_str() == "include" {
                                 expand_include(ec, &mut parser, &mut *st, span)
                             } else {
@@ -455,14 +464,14 @@ impl TTMacroExpander for Cpp {
 
                         // The meta item will take the form #[...], so we can just
                         // parse the [] as a single token tree
-                        Ok(ast::TokenTree::Delimited(..)) => Ok(()),
+                        Ok(TokenTree::Delimited(..)) => Ok(()),
                         Ok(tt) => fatal(ec, tt.get_span(), "Unrecognized token after #"),
                         Err(e) => Err(e),
                     }
                 }
 
                 // Looking at an identifier, check which one
-                Ok(ast::TokenTree::Token(span, Token::Ident(ref i))) => {
+                Ok(TokenTree::Token(span, Token::Ident(ref i))) => {
                     if i.name.as_str() == "raw" {
                         expand_raw(ec, &mut parser, &mut *st, span)
                     } else if i.name.as_str() == "fn" {
