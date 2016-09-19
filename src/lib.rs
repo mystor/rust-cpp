@@ -3,6 +3,9 @@
 extern crate syntex_syntax;
 
 #[cfg(feature = "build")]
+extern crate cpp_common;
+
+#[cfg(feature = "build")]
 extern crate gcc;
 
 #[cfg(feature = "macro")]

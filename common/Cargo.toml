@@ -1,0 +1,9 @@
+[package]
+name = "cpp_common"
+version = "0.1.0"
+authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "The common parsing backend for the parsing and macro backends"
+
+[dependencies]
+syntex_syntax = "0.43.0"
+

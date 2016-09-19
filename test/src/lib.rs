@@ -1,8 +1,13 @@
+#![cfg_attr(feature = "closures", feature(rustc_macro, custom_derive))]
 #![cfg_attr(not(test), allow(dead_code))]
 #![allow(improper_ctypes)]
 
 #[macro_use]
 extern crate cpp;
+
+#[cfg(feature="closures")]
+#[macro_use]
+extern crate cpp_macros;
 
 #[cfg(test)]
 use std::ffi::CString;
@@ -288,4 +293,16 @@ fn pub_struct() {
     unsafe {
         assert!(test_pub::test_pub_things(a, b, c, d));
     }
+}
+
+#[cfg(feature="closures")]
+#[test]
+fn immutable_closure() {
+    let x: i32 = 10;
+    let y = unsafe {
+        cpp!((x as "int32_t") -> i32 as "int32_t" {
+            return x + 20;
+        })
+    };
+    assert_eq!(y, 30);
 }

@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::env;
 use std::path::Path;
 use std::iter::FromIterator;
+use std::hash::{Hash, Hasher, SipHasher};
 
 use syntex_syntax::ast;
 use syntex_syntax::ext::base::{
@@ -12,12 +13,10 @@ use syntex_syntax::ext::base::{
     MacResult,
     ExtCtxt,
     DummyResult,
-    MacEager,
     TTMacroExpander,
     NamedSyntaxExtension,
     SyntaxExtension,
 };
-use syntex_syntax::util::small_vector::SmallVector;
 use syntex_syntax::codemap::{Span, FileLines, SpanSnippetError};
 use syntex_syntax::parse::{self, token};
 use syntex_syntax::parse::token::{Token, keywords};
@@ -27,6 +26,8 @@ use syntex_syntax::parse::{PResult, parser, common};
 use syntex_syntax::tokenstream::TokenTree;
 
 use gcc;
+
+use cpp_common::{parse_cpp_closure, CppClosure};
 
 const RUST_TYPES_HEADER: &'static str = r#"
 #ifndef _RUST_TYPES_H_
@@ -436,6 +437,35 @@ fn expand_struct<'s>(ec: &mut ExtCtxt<'s>,
     Ok(())
 }
 
+fn expand_closure(ec: &mut ExtCtxt, closure: CppClosure, st: &mut State, span: Span) {
+    let cpp_param = closure.captures.iter().map(|cap| {
+        format!("{} {}& {}",
+                if cap.mutable { "" } else { "const" },
+                cap.cpp_ty,
+                cap.name)
+    }).collect::<Vec<_>>().join(", ");
+
+    let hash = {
+        let mut hasher = SipHasher::new();
+        closure.hash(&mut hasher);
+        hasher.finish()
+    };
+
+    let result = format!(r#"
+{cpp_ty} _rust_cpp_closure_{hash}({cpp_param}) {{ {body} }}
+"#,
+                         cpp_ty = closure.cpp_ty,
+                         hash = hash,
+                         cpp_param = cpp_param,
+                         body = closure.body);
+    for line in result.lines() {
+        println!("cargo:warning={}", line);
+    }
+
+    st.fndecls.push_str(&line_pragma(ec, span));
+    st.fndecls.push_str(&format!("{}\n", result));
+}
+
 struct Cpp(Rc<RefCell<State>>);
 impl TTMacroExpander for Cpp {
     fn expand<'cx>(&self,
@@ -446,6 +476,17 @@ impl TTMacroExpander for Cpp {
     {
         let mut st = self.0.borrow_mut();
         let mut parser = ec.new_parser_from_tts(tts);
+
+        // Check for a closure. If there is a closure, no other items will be
+        // present in the macro, so we can just stop here.
+        if parser.check(&token::OpenDelim(token::Paren)) {
+            let closure = parse_cpp_closure(ec.parse_sess, &mut parser);
+            expand_closure(ec, closure, &mut st, mac_span);
+            if let Err(mut e) = parser.expect(&token::Eof) {
+                e.emit();
+            }
+            return DummyResult::any(mac_span);
+        }
 
         loop {
             if parser.check(&token::Eof) {
@@ -501,6 +542,6 @@ impl TTMacroExpander for Cpp {
             }
         }
 
-        MacEager::items(SmallVector::zero())
+        DummyResult::any(mac_span)
     }
 }

@@ -4,8 +4,12 @@ version = "0.1.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 build = "build.rs"
 
+[features]
+closures = ["cpp_macros"]
+
 [build-dependencies]
 cpp = { path = "../", features = ["build"] }
 
 [dependencies]
 cpp = { path = "../", features = ["macro"] }
+cpp_macros = { path = "../macros", optional = true }

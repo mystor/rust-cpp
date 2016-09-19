@@ -4,6 +4,17 @@ macro_rules! cpp {
     // Finished
     () => {};
 
+    // Closures
+    (($($id:ident as $cty:tt),*) -> $rty:ty as $crty:tt $body:tt) => {
+        {
+            #[derive(rust_cpp_internal)]
+            struct Dummy(__!(
+                ($($id as $cty),*) -> $rty as $crty $body
+            ));
+            Dummy::call($(& $id as *const _ as *const u8),*)
+        }
+    };
+
     // Parse toplevel #include macros
     (#include < $i:ident > $($rest:tt)*) => {cpp!{$($rest)*}};
     (#include $l:tt $($rest:tt)*) => {cpp!{$($rest)*}};
