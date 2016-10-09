@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 
 [lib]
-rustc-macro = true
+proc-macro = true
 
 [dependencies]
 cpp_common = { path = "../common" }

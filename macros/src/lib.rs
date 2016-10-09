@@ -1,12 +1,12 @@
-#![feature(rustc_macro, rustc_macro_lib)]
-extern crate rustc_macro;
+#![feature(proc_macro, proc_macro_lib)]
+extern crate proc_macro;
 extern crate cpp_common;
 
 use std::hash::{Hash, Hasher, SipHasher};
-use rustc_macro::TokenStream;
+use proc_macro::TokenStream;
 use cpp_common::{parse_cpp_closure, ParseSess, new_parser_from_source_str};
 
-#[rustc_macro_derive(rust_cpp_internal)]
+#[proc_macro_derive(rust_cpp_internal)]
 pub fn expand(input: TokenStream) -> TokenStream {
     let source = input.to_string();
     let trimmed = source.trim();
@@ -57,7 +57,6 @@ impl Dummy {{
         rs_ty = closure.rs_ty,
         hash = hash,
     );
-    println!("GENERATED CODE = {}", &result);
 
     result.parse().unwrap()
 }

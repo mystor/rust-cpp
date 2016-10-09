@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "closures", feature(rustc_macro, custom_derive))]
+#![cfg_attr(feature = "closures", feature(proc_macro, custom_derive))]
 #![cfg_attr(not(test), allow(dead_code))]
 #![allow(improper_ctypes)]
 

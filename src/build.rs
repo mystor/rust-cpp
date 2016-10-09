@@ -458,9 +458,6 @@ fn expand_closure(ec: &mut ExtCtxt, closure: CppClosure, st: &mut State, span: S
                          hash = hash,
                          cpp_param = cpp_param,
                          body = closure.body);
-    for line in result.lines() {
-        println!("cargo:warning={}", line);
-    }
 
     st.fndecls.push_str(&line_pragma(ec, span));
     st.fndecls.push_str(&format!("{}\n", result));
