@@ -256,3 +256,34 @@ fn enum_class_prefix() {
         assert_eq!(test_enum_prefix(), EnumPrefix::B);
     }
 }
+
+mod test_pub {
+    cpp! {
+        pub struct PubStruct {
+            pub a: i32 as "int32_t",
+        }
+
+        #[allow(dead_code)]
+        pub enum PubEnum {A, B,}
+        #[allow(dead_code)]
+        pub enum class PubEnumClass {A, B,}
+        #[allow(dead_code)]
+        pub enum prefix PubEnumPrefix {A, B,}
+
+        pub fn test_pub_things(a: PubStruct as "PubStruct",
+                               b: PubEnum as "PubEnum",
+                               c: PubEnumClass as "PubEnumClass",
+                               d: PubEnumPrefix as "PubEnumPrefix") -> bool as "bool" {
+            return a.a == 10 && b == A && c == PubEnumClass::A && d == PubEnumPrefix_A;
+        }
+    }
+}
+
+#[test]
+fn pub_struct() {
+    let a = test_pub::PubStruct{ a: 10 };
+    let b = test_pub::PubEnum::A;
+    let c = test_pub::PubEnumClass::A;
+    let d = test_pub::PubEnumPrefix::A;
+    assert!(test_pub::test_pub_things(a, b, c, d));
+}

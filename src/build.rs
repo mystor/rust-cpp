@@ -480,6 +480,9 @@ impl TTMacroExpander for Cpp {
                         expand_enum(ec, &mut parser, &mut *st, span)
                     } else if i.name.as_str() == "struct" {
                         expand_struct(ec, &mut parser, &mut *st, span)
+                    } else if i.name.as_str() == "pub" {
+                        // If we see a `pub`, it isn't relevant to us, so ignore it
+                        Ok(())
                     } else {
                         fatal(ec, span, "Unrecognized token")
                     }

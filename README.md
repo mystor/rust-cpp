@@ -96,6 +96,8 @@ cpp! {
     // Define a struct which is shared between C++ and rust. In C++-land its
     // name will be in the global namespace. In rust it will be located 
     // wherever the cpp! block is located
+    // NOTE: If the struct is marked as `pub`, all fields must also be marked
+    // as `pub`, due to limitations in the implementation of the cpp! macro.
     struct MyStruct {
         x: i32 as "int32_t",
         y: *const i8 as "const char*",
