@@ -285,5 +285,7 @@ fn pub_struct() {
     let b = test_pub::PubEnum::A;
     let c = test_pub::PubEnumClass::A;
     let d = test_pub::PubEnumPrefix::A;
-    assert!(test_pub::test_pub_things(a, b, c, d));
+    unsafe {
+        assert!(test_pub::test_pub_things(a, b, c, d));
+    }
 }

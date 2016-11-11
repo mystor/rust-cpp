@@ -414,6 +414,7 @@ fn expand_struct<'s>(ec: &mut ExtCtxt<'s>,
             &token::CloseDelim(token::Brace),
             common::SeqSep::trailing_allowed(token::Comma),
             |p| {
+                p.eat_keyword(keywords::Pub);
                 let name = try!(p.parse_ident());
                 try!(p.expect(&Token::Colon));
                 try!(p.parse_ty_sum());
