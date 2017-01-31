@@ -1,0 +1,12 @@
+[package]
+name = "cpp_build"
+version = "0.1.0"
+authors = ["Michael Layzell <michael@thelayzells.com>"]
+
+[dependencies]
+lazy_static = "0.2.2"
+cpp_common = { path = "../cpp_common", version = "0.1" }
+syn = { path = "../../syn", version = "0.11", features=["full", "visit"] }
+syn_sourcemap = { path = "../syn_sourcemap", version = "0.1" }
+synom = { path = "../../syn/synom", version = "0.11" }
+gcc = "0.3"

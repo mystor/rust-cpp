@@ -5,7 +5,8 @@ authors = ["Michael Layzell <michael@thelayzells.com>"]
 build = "build.rs"
 
 [build-dependencies]
-cpp = { path = "../", features = ["build"] }
+cpp_build = { path = "../cpp_build" }
 
 [dependencies]
-cpp = { path = "../", features = ["macro"] }
+cpp = { path = "../cpp" }
+cpp_macros = { path = "../cpp_macros" }
