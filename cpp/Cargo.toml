@@ -2,5 +2,12 @@
 name = "cpp"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "Inline C++ code closures"
+readme = "../README.md"
+license = "MIT/Apache-2.0"
+keywords = ["c", "cxx", "ffi", "compiler"]
+categories = ["development-tools::ffi"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp"
 
 [dependencies]

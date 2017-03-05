@@ -2,6 +2,13 @@
 name = "cpp_build"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "Cargo build script for the `cpp` crate"
+readme = "../README.md"
+license = "MIT/Apache-2.0"
+keywords = ["c", "cxx", "ffi", "compiler", "build-dependencies"]
+categories = ["development-tools::ffi"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp_build"
 
 [dependencies]
 lazy_static = "0.2.2"

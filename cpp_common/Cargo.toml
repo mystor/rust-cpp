@@ -2,6 +2,13 @@
 name = "cpp_common"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "Implementation details crate for the `cpp` crate"
+readme = "../README.md"
+license = "MIT/Apache-2.0"
+keywords = ["c", "cxx", "ffi", "compiler", "build-dependencies"]
+categories = ["development-tools::ffi"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp_common"
 
 [dependencies]
 cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "visit"] }

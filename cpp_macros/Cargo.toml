@@ -2,6 +2,13 @@
 name = "cpp_macros"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "Procedural macro implementation for the `cpp` crate"
+readme = "../README.md"
+license = "MIT/Apache-2.0"
+keywords = ["c", "cxx", "ffi", "compiler"]
+categories = ["development-tools::ffi"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp_macros"
 
 [lib]
 proc-macro = true
