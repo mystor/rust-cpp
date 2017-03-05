@@ -1,54 +1,82 @@
+//! `synmap` provides utilities for parsing multi-file crates into `syn` AST
+//! nodes, and resolving the spans attached to those nodes into raw source text,
+//! and line/column information.
+//!
+//! The primary entry point for the crate is the `SourceMap` type, which stores
+//! mappings from byte offsets to file information, along with cached file
+//! information.
+
 extern crate cpp_syn as syn;
 
-use std::fs::File;
+extern crate memchr;
+
+use std::fmt;
+use std::error;
+use std::fs::{self, File};
 use std::io::prelude::*;
-use std::io;
-use std::io::BufReader;
+use std::io::{self, Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use syn::{Crate, Item, Attribute, ItemKind, Ident, MetaItem, Lit, LitKind, Span};
 use syn::fold::{self, Folder};
-use std::error;
-use std::fmt;
-use std::panic;
 
-const FILE_PADDING_BYTES: usize = 100;
+/// This constant controls the amount of padding which is created between
+/// consecutive files' span ranges. It is non-zero to ensure that the low byte
+/// offset of one file is not equal to the high byte offset of the previous
+/// file.
+const FILE_PADDING_BYTES: usize = 1;
+
+/// Information regarding the on-disk location of a span of code.
+/// This type is produced by `SourceMap::locinfo`.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct LocInfo<'a> {
+    pub path: &'a Path,
+    pub line: usize,
+    pub col: usize,
+}
+
+impl<'a> fmt::Display for LocInfo<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}:{}", self.path.display(), self.line, self.col)
+    }
+}
 
 #[derive(Debug)]
-pub enum Error {
-    StringError(String),
-    IOError(io::Error),
+struct FileInfo {
+    span: Span,
+    path: PathBuf,
+    src: String,
+    lines: Vec<usize>
 }
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::StringError(ref s) => s,
-            Error::IOError(ref err) => err.description(),
-        }
-    }
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(error::Error::description(self), f)
-    }
-}
-impl From<String> for Error {
-    fn from(s: String) -> Error {
-        Error::StringError(s)
-    }
-}
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::IOError(err)
+
+/// NOTE: This produces line and column. Line is 1-indexed, column is 0-indexed
+fn offset_line_col(lines: &Vec<usize>, off: usize) -> (usize, usize) {
+    match lines.binary_search(&off) {
+        Ok(found) => (found + 1, 0),
+        Err(idx) => (idx, off - lines[idx - 1]),
     }
 }
 
+fn lines_offsets(s: &[u8]) -> Vec<usize> {
+    let mut lines = vec![0];
+    let mut prev = 0;
+    while let Some(len) = memchr::memchr(b'\n', &s[prev..]) {
+        prev += len + 1;
+        lines.push(prev);
+    }
+    lines
+}
+
+/// The `SourceMap` is the primary entry point for `synmap`. It maintains a
+/// mapping between `Span` objects and the original source files they were
+/// parsed from.
 #[derive(Debug)]
 pub struct SourceMap {
-    files: Vec<(Span, PathBuf)>,
+    files: Vec<FileInfo>,
     offset: usize,
 }
 
 impl SourceMap {
+    /// Create a new `SourceMap` object with no files inside of it.
     pub fn new() -> SourceMap {
         SourceMap {
             files: Vec::new(),
@@ -56,138 +84,191 @@ impl SourceMap {
         }
     }
 
-    pub fn parse_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Crate, Error> {
-        // Load the original source file, and read it to a string
+    /// Read and parse the passed-in file path as a crate root, recursively
+    /// parsing each of the submodules. Produces a syn `Crate` object with
+    /// all submodules inlined.
+    ///
+    /// `Span` objects inside the resulting crate object are `SourceMap`
+    /// relative, and should be interpreted by passing to the other methods on
+    /// this type, such as `locinfo`, `source_text`, or `filename`.
+    pub fn add_crate_root<P: AsRef<Path>>(&mut self, path: P) -> io::Result<Crate> {
+        self.parse_canonical_file(fs::canonicalize(path)?)
+    }
+
+    /// This is an internal method which requires a canonical pathbuf as
+    /// returned from a method like `fs::canonicalize`.
+    fn parse_canonical_file(&mut self, path: PathBuf) -> io::Result<Crate> {
+        // Parse the crate with syn
         let mut source = String::new();
-        File::open(path.as_ref())?.read_to_string(&mut source)?;
+        File::open(&path)?.read_to_string(&mut source)?;
+        let krate = syn::parse_crate(&source)
+            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
-        // Parse the source file as a crate
-        let krate = syn::parse_crate(&source)?;
-
-        // We've parsed it, register the file in the sourcemap
+        // Register the read-in file in the SourceMap
         let offset = self.offset;
         self.offset += source.len() + FILE_PADDING_BYTES;
-        self.files.push((Span {
-            lo: offset,
-            hi: offset + source.len(),
-        }, PathBuf::from(path.as_ref())));
+        self.files.push(FileInfo {
+            span: Span {
+                lo: offset,
+                hi: offset + source.len(),
+            },
+            path: path,
+            lines: lines_offsets(source.as_bytes()),
+            src: source,
+        });
 
-        // Perform the fold
+        // Walk the parsed Crate object, recursively filling in the bodies of
+        // `mod` statements, and rewriting spans to be SourceMap-relative
+        // instead of file-relative.
         let mut walker = Walker {
-            offset: offset,
-            working: path.as_ref().parent().unwrap().to_path_buf(),
-            sourcemap: self,
+            idx: self.files.len() - 1,
+            error: None,
+            sm: self,
         };
 
-        panic::catch_unwind(panic::AssertUnwindSafe(|| walker.fold_crate(krate)))
-            .map_err(|err| match err.downcast::<Error>() {
-                Ok(err) => *err,
-                Err(err) => panic::resume_unwind(err),
-            })
+        let krate = walker.fold_crate(krate);
+        if let Some(err) = walker.error {
+            return Err(err);
+        }
+
+        Ok(krate)
     }
 
-    fn get_path(&self, mut span: Span) -> (&Path, Span) {
-        for &(fspan, ref p) in &self.files {
-            if span.lo >= fspan.lo && span.lo <= fspan.hi {
+
+    fn local_fileinfo(&self, mut span: Span) -> io::Result<(&FileInfo, Span)> {
+        if span.lo > span.hi {
+            return Err(Error::new(ErrorKind::InvalidInput,
+                                  "Invalid span object with negative length"));
+        }
+        for fi in &self.files {
+            if span.lo >= fi.span.lo && span.lo <= fi.span.hi &&
+                span.hi >= fi.span.lo && span.hi <= fi.span.hi {
                 // Remove the offset
-                span.lo -= fspan.lo;
-                span.hi -= fspan.lo;
+                span.lo -= fi.span.lo;
+                span.hi -= fi.span.lo;
                 // Set the path
-                return (p, span);
+                return Ok((fi, span));
             }
         }
-        panic!("Given span is out of range");
+        Err(Error::new(ErrorKind::InvalidInput,
+                       "Span is not part of any input file"))
     }
 
-    pub fn get_src(&self, span: Span) -> String {
-        let (path, span) = self.get_path(span);
-
-        let mut file = File::open(&path).expect("Unable to open source file");
-        file.seek(io::SeekFrom::Start(span.lo as u64)).expect("Unable to seek source file");
-
-        let mut data = vec![0; span.hi - span.lo];
-        file.read_exact(&mut data).expect("Unable to read span bytes");
-
-        String::from_utf8(data).expect("Span is not utf-8")
+    /// Get the filename which contains the given span.
+    ///
+    /// Fails if the span is invalid or spans multiple source files.
+    pub fn filename(&self, span: Span) -> io::Result<&Path> {
+        Ok(&self.local_fileinfo(span)?.0.path)
     }
 
-    pub fn get_line_no(&self, span: Span) -> (&Path, usize, usize) {
-        let (path, span) = self.get_path(span);
+    /// Get the source text for the passed-in span.
+    ///
+    /// Fails if the span is invalid or spans multiple source files.
+    pub fn source_text(&self, span: Span) -> io::Result<&str> {
+        let (fi, span) = self.local_fileinfo(span)?;
+        Ok(&fi.src[span.lo..span.hi])
+    }
 
-        let mut file = BufReader::new(File::open(&path).expect("Unable to open source file"));
+    /// Get a LocInfo object for the passed-in span, containing line, column,
+    /// and file name information for the beginning and end of the span. The
+    /// `path` field in the returned LocInfo struct will be a reference to a
+    /// canonical path.
+    ///
+    /// Fails if the span is invalid or spans multiple source files.
+    pub fn locinfo(&self, span: Span) -> io::Result<LocInfo> {
+        let (fi, span) = self.local_fileinfo(span)?;
 
-        let mut col = span.lo;
-        let mut line = 1;
-        let mut _dummy = Vec::new();
-        loop {
-            let amount = file.read_until(b'\n', &mut _dummy).unwrap();
-            if col < amount {
-                return (path, line, col);
-            }
-            col -= amount;
-            line += 1;
-        }
+        let (line, col) = offset_line_col(&fi.lines, span.lo);
+        Ok(LocInfo {
+            path: &fi.path,
+            line: line,
+            col: col,
+        })
     }
 }
 
 struct Walker<'a> {
-    offset: usize,
-    working: PathBuf,
-    sourcemap: &'a mut SourceMap
+    idx: usize,
+    error: Option<Error>,
+    sm: &'a mut SourceMap,
 }
 
 impl<'a> Walker<'a> {
-    fn read_submodule(&mut self, path: &Path) -> Result<(Vec<Attribute>, Vec<Item>), Error> {
-        let faux_crate = self.sourcemap.parse_file(path)?;
+    fn read_submodule(&mut self, path: PathBuf) -> io::Result<Crate> {
+        let faux_crate = self.sm.parse_canonical_file(path)?;
         if faux_crate.shebang.is_some() {
-            return Err(format!("Submodules should not contain shebangs").into());
+            return Err(Error::new(ErrorKind::InvalidData,
+                                  "Only the root file of a crate may contain shebangs"));
         }
 
-        let Crate { attrs, items, .. } = faux_crate;
-        Ok((attrs, items))
+        Ok(faux_crate)
     }
 
     fn get_attrs_items(&mut self,
                        attrs: &[Attribute],
                        ident: &Ident)
-                       -> Result<(Vec<Attribute>, Vec<Item>), Error> {
+                       -> io::Result<Crate> {
+        let parent = self.sm.files[self.idx].path.parent()
+            .ok_or(Error::new(ErrorKind::InvalidInput,
+                              "cannot parse file without parent directory"))?
+            .to_path_buf();
+
         // Determine the path of the inner module's file
         for attr in attrs {
             match attr.value {
                 MetaItem::NameValue(ref id, Lit{ node: LitKind::Str(ref s, _), .. }) => {
                     if id.as_ref() == "path" {
-                        let explicit = self.working.join(&s[..]);
-                        return self.read_submodule(&explicit);
+                        let explicit = parent.join(&s[..]);
+                        return self.read_submodule(explicit);
                     }
                 }
                 _ => {}
             }
         }
 
-        let subdir = self.working.join(&format!("{}/mod.rs", ident));
+        let subdir = parent.join(&format!("{}/mod.rs", ident));
         if subdir.is_file() {
-            return self.read_submodule(&subdir);
+            return self.read_submodule(subdir);
         }
 
-        let adjacent = self.working.join(&format!("{}.rs", ident));
+        let adjacent = parent.join(&format!("{}.rs", ident));
         if adjacent.is_file() {
-            return self.read_submodule(&adjacent);
+            return self.read_submodule(adjacent);
         }
 
-        Err(format!("No matching file with module definition for `mod {}`",
-                    ident)
-            .into())
+        Err(Error::new(ErrorKind::NotFound,
+                       format!("No file with module definition for `mod {}`", ident)))
     }
 }
 
 impl<'a> Folder for Walker<'a> {
     fn fold_item(&mut self, mut item: Item) -> Item {
+        if self.error.is_some() {
+            return item; // Early return to avoid extra work when erroring
+        }
+
         match item.node {
             ItemKind::Mod(None) => {
-                // XXX: Handle errors better
                 let (attrs, items) = match self.get_attrs_items(&item.attrs, &item.ident) {
-                    Ok((attrs, items)) => (attrs, items),
-                    Err(e) => panic!(e),
+                    Ok(Crate{ attrs, items, .. }) => (attrs, items),
+                    Err(e) => {
+                        // Get the file, line, and column information for the
+                        // mod statement we're looking at.
+                        let span = self.fold_span(item.span);
+                        let loc = match self.sm.locinfo(span) {
+                            Ok(li) => li.to_string(),
+                            Err(_) => "unknown location".to_owned(),
+                        };
+
+                        let e = Error::new(ErrorKind::Other, ModParseErr {
+                            err: e,
+                            msg: format!("Error while parsing `mod {}` \
+                                          statement at {}",
+                                         item.ident, loc)
+                        });
+                        self.error = Some(e);
+                        return item;
+                    },
                 };
                 item.attrs.extend_from_slice(&attrs);
                 item.node = ItemKind::Mod(Some(items));
@@ -198,9 +279,33 @@ impl<'a> Folder for Walker<'a> {
     }
 
     fn fold_span(&mut self, span: Span) -> Span {
+        let offset = self.sm.files[self.idx].span.lo;
         Span {
-            lo: span.lo + self.offset,
-            hi: span.hi + self.offset,
+            lo: span.lo + offset,
+            hi: span.hi + offset,
         }
+    }
+}
+
+/// This is an internal error which is used to build errors when parsing an
+/// inner module fails.
+#[derive(Debug)]
+struct ModParseErr {
+    err: Error,
+    msg: String,
+}
+impl error::Error for ModParseErr {
+    fn description(&self) -> &str {
+        &self.msg
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        Some(&self.err)
+    }
+}
+impl fmt::Display for ModParseErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.msg, f)?;
+        fmt::Display::fmt(&self.err, f)
     }
 }

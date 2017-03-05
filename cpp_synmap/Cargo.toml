@@ -2,7 +2,15 @@
 name = "cpp_synmap"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
+description = "Sourcemap and full crate parsing support for `cpp_syn`"
+readme = "README.md"
+license = "MIT/Apache-2.0"
+keywords = ["syn", "parsing", "sourcemap", "crate"]
+categories = ["development-tools::procedural-macro-helpers"]
+repository = "https://github.com/mystor/rust-cpp"
+documentation = "https://docs.rs/cpp_synmap"
 
 [dependencies]
+memchr = "1.0"
 cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "fold"] }
 cpp_synom = { path = "../cpp_syn/synom", version = "0.12" }

@@ -238,7 +238,7 @@ pub fn build<P: AsRef<Path>>(path: P) {
 
     // Parse the crate
     let mut sm = SourceMap::new();
-    let krate = match sm.parse_file(path) {
+    let krate = match sm.add_crate_root(path) {
         Ok(krate) => krate,
         Err(_) => {
             // NOTE: We discard the error message from syn, as it's pretty much useless.
@@ -288,11 +288,10 @@ fn extract_with_span(mut spanned: &mut Spanned<String>,
         spanned.span.lo += offset;
         spanned.span.hi += offset;
 
-        let (file, line, col) = sm.get_line_no(spanned.span);
-        let file = std::env::current_dir().unwrap().join(&file);
+        let loc = sm.locinfo(spanned.span).unwrap();
         spanned.node = format!("#line {} {:?}\n",
-                               line, file);
-        for _ in 0..col {
+                               loc.line, loc.path);
+        for _ in 0..loc.col {
             spanned.node.push(' ');
         }
         spanned.node.push_str(src_slice);
@@ -311,7 +310,7 @@ impl<'a> Visitor for Handle<'a> {
                 lo: tts[0].span().lo,
                 hi: tts[tts.len() - 1].span().hi,
             };
-            let src = self.sm.get_src(span);
+            let src = self.sm.source_text(span).unwrap();
             let input = synom::ParseState::new(&src);
             match parsing::build_macro(input).expect("cpp! macro") {
                 Macro::Closure(mut c) => {
