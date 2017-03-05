@@ -5,10 +5,6 @@ rust:
 - nightly
 sudo: false
 script:
-- (cd cpp && cargo build)
-- (cd cpp_common && cargo build)
-- (cd cpp_build && cargo build)
-- (cd cpp_macros && cargo build)
 - (cd test && cargo test)
 - (cd test && cargo test --release)
 notifications:
