@@ -1,9 +1,8 @@
 [package]
-name = "cpp_common"
+name = "cpp_synmap"
 version = "0.2.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 
 [dependencies]
-cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "visit"] }
+cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "fold"] }
 cpp_synom = { path = "../cpp_syn/synom", version = "0.12" }
-quote = "0.3"

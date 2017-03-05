@@ -1,6 +1,12 @@
-extern crate synom;
+//! This crate is the `cpp` procedural macro implementation. It is useless
+//! without the companion crates `cpp`, and `cpp_build`.
+//!
+//! For more information, see the [`cpp` crate module level
+//! documentation](https://docs.rs/cpp).
 
-extern crate syn;
+extern crate cpp_synom as synom;
+
+extern crate cpp_syn as syn;
 
 #[macro_use]
 extern crate quote;

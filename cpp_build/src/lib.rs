@@ -1,12 +1,18 @@
+//! This crate is the `cpp` cargo build script implementation. It is useless
+//! without the companion crates `cpp`, and `cpp_macro`.
+//!
+//! For more information, see the [`cpp` crate module level
+//! documentation](https://docs.rs/cpp).
+
 extern crate cpp_common;
 
-extern crate synom;
+extern crate cpp_synom as synom;
 
-extern crate syn;
+extern crate cpp_syn as syn;
+
+extern crate cpp_synmap;
 
 extern crate gcc;
-
-extern crate syn_sourcemap;
 
 #[macro_use]
 extern crate lazy_static;
@@ -20,7 +26,7 @@ use std::process::Command;
 use syn::visit::Visitor;
 use syn::{Mac, Span, Spanned, DUMMY_SPAN};
 use cpp_common::{parsing, Closure, ClosureSig, Capture, Macro};
-use syn_sourcemap::SourceMap;
+use cpp_synmap::SourceMap;
 
 fn warnln_impl(a: String) {
     for s in a.lines() {
@@ -224,6 +230,8 @@ Failed to remove existing build artifacts from output directory."#);
 Failed to create output object directory."#);
 }
 
+/// Run the `cpp` build process on the crate with a root at the given path.
+/// Intended to be used within `build.rs` files.
 pub fn build<P: AsRef<Path>>(path: P) {
     // Clean up any leftover artifacts
     clean_artifacts();
@@ -265,10 +273,10 @@ successfully, such that rustc can provide an error message."#);
     gen_sizes_exe(&config);
 }
 
-pub struct Handle<'a> {
-    pub closures: Vec<Closure>,
-    pub snippets: String,
-    pub sm: &'a SourceMap,
+struct Handle<'a> {
+    closures: Vec<Closure>,
+    snippets: String,
+    sm: &'a SourceMap,
 }
 
 fn extract_with_span(mut spanned: &mut Spanned<String>,

@@ -1,4 +1,4 @@
-extern crate syn;
+extern crate cpp_syn as syn;
 
 use std::fs::File;
 use std::io::prelude::*;

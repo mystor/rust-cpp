@@ -1,0 +1,4 @@
+[submodule "cpp_syn"]
+	path = cpp_syn
+	url = https://github.com/mystor/cpp_syn.git
+	branch = cpp_syn

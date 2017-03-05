@@ -1,8 +1,0 @@
-[package]
-name = "syn_sourcemap"
-version = "0.1.0"
-authors = ["Michael Layzell <michael@thelayzells.com>"]
-
-[dependencies]
-syn = { path = "../../syn", version = "0.11", features = ["full", "fold"] }
-synom = { path = "../../syn/synom", version = "0.11" }

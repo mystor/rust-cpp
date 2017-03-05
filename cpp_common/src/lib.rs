@@ -1,8 +1,8 @@
 #[macro_use]
-extern crate syn;
+extern crate cpp_syn as syn;
 
 #[macro_use]
-extern crate synom;
+extern crate cpp_synom as synom;
 
 #[macro_use]
 extern crate quote;
