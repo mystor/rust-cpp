@@ -10,6 +10,7 @@ script:
 - (cd cpp_build && cargo build)
 - (cd cpp_macros && cargo build)
 - (cd test && cargo test)
+- (cd test && cargo test --release)
 notifications:
   email:
     on_success: never

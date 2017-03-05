@@ -28,6 +28,5 @@ install:
 build: false
 
 test_script:
-  - cargo test
   - cargo test --manifest-path test/Cargo.toml
   - cargo test --manifest-path test/Cargo.toml --release
