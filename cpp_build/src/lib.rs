@@ -240,14 +240,15 @@ pub fn build<P: AsRef<Path>>(path: P) {
     let mut sm = SourceMap::new();
     let krate = match sm.add_crate_root(path) {
         Ok(krate) => krate,
-        Err(_) => {
-            // NOTE: We discard the error message from syn, as it's pretty much useless.
+        Err(err) => {
             warnln!(r#"-- rust-cpp parse error --
 
-There was an error parsing the crate for the rust-cpp build script.
+There was an error parsing the crate for the rust-cpp build script:
+
+{}
 
 In order to provide a better error message, the build script will exit
-successfully, such that rustc can provide an error message."#);
+successfully, such that rustc can provide an error message."#, err);
             return;
         }
     };
