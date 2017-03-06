@@ -15,5 +15,5 @@ lazy_static = "0.2.2"
 gcc = "0.3"
 cpp_common = { path = "../cpp_common", version = "0.2.0" }
 cpp_synmap = { path = "../cpp_synmap", version = "0.2.0" }
-cpp_syn = { path = "../cpp_syn", version = "0.12", features=["full", "visit"] }
-cpp_synom = { path = "../cpp_syn/synom", version = "0.12" }
+cpp_syn = { version = "0.12", features=["full", "visit"] }
+cpp_synom = { version = "0.12" }

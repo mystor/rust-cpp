@@ -11,6 +11,6 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp_common"
 
 [dependencies]
-cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "visit"] }
-cpp_synom = { path = "../cpp_syn/synom", version = "0.12" }
+cpp_syn = { version = "0.12", features = ["full", "visit"] }
+cpp_synom = { version = "0.12" }
 quote = "0.3"

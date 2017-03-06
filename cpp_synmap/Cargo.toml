@@ -12,5 +12,5 @@ documentation = "https://docs.rs/cpp_synmap"
 
 [dependencies]
 memchr = "1.0"
-cpp_syn = { path = "../cpp_syn", version = "0.12", features = ["full", "fold"] }
-cpp_synom = { path = "../cpp_syn/synom", version = "0.12" }
+cpp_syn = { version = "0.12", features = ["full", "fold"] }
+cpp_synom = { version = "0.12" }
