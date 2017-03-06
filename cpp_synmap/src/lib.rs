@@ -10,7 +10,7 @@ extern crate cpp_syn as syn;
 
 extern crate memchr;
 
-use std::fmt;
+use std::fmt::{self, Write};
 use std::error;
 use std::fs::{self, File};
 use std::io::prelude::*;
@@ -226,7 +226,8 @@ impl<'a> Walker<'a> {
             }
         }
 
-        let subdir = parent.join(&format!("{}/mod.rs", ident));
+        let mut subdir = parent.join(ident.as_ref());
+        subdir.push("mod.rs");
         if subdir.is_file() {
             return self.read_submodule(subdir);
         }
@@ -306,6 +307,7 @@ impl error::Error for ModParseErr {
 impl fmt::Display for ModParseErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.msg, f)?;
+        f.write_char('\n')?;
         fmt::Display::fmt(&self.err, f)
     }
 }
