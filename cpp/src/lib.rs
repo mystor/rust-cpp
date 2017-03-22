@@ -55,7 +55,7 @@
 //! cpp = "0.2"
 //! cpp_macros = "0.2"
 //!
-//! [dev-dependencies]
+//! [build-dependencies]
 //! cpp_build = "0.2"
 //! ```
 //!
