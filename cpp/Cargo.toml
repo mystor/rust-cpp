@@ -1,6 +1,6 @@
 [package]
 name = "cpp"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 description = "Inline C++ code closures"
 readme = "../README.md"

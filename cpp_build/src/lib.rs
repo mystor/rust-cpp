@@ -230,18 +230,220 @@ Failed to remove existing build artifacts from output directory."#);
 Failed to create output object directory."#);
 }
 
-/// Run the `cpp` build process on the crate with a root at the given path.
-/// Intended to be used within `build.rs` files.
-pub fn build<P: AsRef<Path>>(path: P) {
-    // Clean up any leftover artifacts
-    clean_artifacts();
+/// This struct is for advanced users of the build script. It allows providing
+/// configuration options to `cpp` and the compiler when it is used to build.
+///
+/// ## API Note
+///
+/// Internally, `cpp` uses `gcc-rs` to build the compilation artifact, and many
+/// of the methods defined on this type directly proxy to an internal
+/// `gcc::Config` object.
+pub struct Config {
+    gcc: gcc::Config,
+}
 
-    // Parse the crate
-    let mut sm = SourceMap::new();
-    let krate = match sm.add_crate_root(path) {
-        Ok(krate) => krate,
-        Err(err) => {
-            warnln!(r#"-- rust-cpp parse error --
+impl Config {
+    /// Create a new `Config` object. This object will hold the configuration
+    /// options which control the build. If you don't need to make any changes,
+    /// `cpp_build::build` is a wrapper function around this interface.
+    pub fn new() -> Config {
+        let mut gcc = gcc::Config::new();
+        gcc.cpp(true);
+        Config {
+            gcc: gcc,
+        }
+    }
+
+    /// Add a directory to the `-I` or include path for headers
+    pub fn include<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+        self.gcc.include(dir);
+        self
+    }
+
+    /// Specify a `-D` variable with an optional value
+    pub fn define(&mut self, var: &str, val: Option<&str>) -> &mut Self {
+        self.gcc.define(var, val);
+        self
+    }
+
+    // XXX: Make sure that this works with sizes logic
+    /// Add an arbitrary object file to link in
+    pub fn object<P: AsRef<Path>>(&mut self, obj: P) -> &mut Self {
+        self.gcc.object(obj);
+        self
+    }
+
+    /// Add an arbitrary flag to the invocation of the compiler
+    pub fn flag(&mut self, flag: &str) -> &mut Self {
+        self.gcc.flag(flag);
+        self
+    }
+
+    // XXX: Make sure this works with sizes logic
+    /// Add a file which will be compiled
+    pub fn file<P: AsRef<Path>>(&mut self, p: P) -> &mut Self {
+        self.gcc.file(p);
+        self
+    }
+
+    /// Set the standard library to link against when compiling with C++
+    /// support.
+    ///
+    /// The default value of this property depends on the current target: On
+    /// OS X `Some("c++")` is used, when compiling for a Visual Studio based
+    /// target `None` is used and for other targets `Some("stdc++")` is used.
+    ///
+    /// A value of `None` indicates that no automatic linking should happen,
+    /// otherwise cargo will link against the specified library.
+    ///
+    /// The given library name must not contain the `lib` prefix.
+    pub fn cpp_link_stdlib(&mut self, cpp_link_stdlib: Option<&str>) -> &mut Self {
+        self.gcc.cpp_link_stdlib(cpp_link_stdlib);
+        self
+    }
+
+    /// Force the C++ compiler to use the specified standard library.
+    ///
+    /// Setting this option will automatically set `cpp_link_stdlib` to the same
+    /// value.
+    ///
+    /// The default value of this option is always `None`.
+    ///
+    /// This option has no effect when compiling for a Visual Studio based
+    /// target.
+    ///
+    /// This option sets the `-stdlib` flag, which is only supported by some
+    /// compilers (clang, icc) but not by others (gcc). The library will not
+    /// detect which compiler is used, as such it is the responsibility of the
+    /// caller to ensure that this option is only used in conjuction with a
+    /// compiler which supports the `-stdlib` flag.
+    ///
+    /// A value of `None` indicates that no specific C++ standard library should
+    /// be used, otherwise `-stdlib` is added to the compile invocation.
+    ///
+    /// The given library name must not contain the `lib` prefix.
+    pub fn cpp_set_stdlib(&mut self, cpp_set_stdlib: Option<&str>) -> &mut Self {
+        self.gcc.cpp_set_stdlib(cpp_set_stdlib);
+        self
+    }
+
+    // XXX: Add support for custom targets
+    //
+    // /// Configures the target this configuration will be compiling for.
+    // ///
+    // /// This option is automatically scraped from the `TARGET` environment
+    // /// variable by build scripts, so it's not required to call this function.
+    // pub fn target(&mut self, target: &str) -> &mut Self {
+    //     self.gcc.target(target);
+    //     self
+    // }
+
+    /// Configures the host assumed by this configuration.
+    ///
+    /// This option is automatically scraped from the `HOST` environment
+    /// variable by build scripts, so it's not required to call this function.
+    pub fn host(&mut self, host: &str) -> &mut Self {
+        self.gcc.host(host);
+        self
+    }
+
+    /// Configures the optimization level of the generated object files.
+    ///
+    /// This option is automatically scraped from the `OPT_LEVEL` environment
+    /// variable by build scripts, so it's not required to call this function.
+    pub fn opt_level(&mut self, opt_level: u32) -> &mut Self {
+        self.gcc.opt_level(opt_level);
+        self
+    }
+
+    /// Configures the optimization level of the generated object files.
+    ///
+    /// This option is automatically scraped from the `OPT_LEVEL` environment
+    /// variable by build scripts, so it's not required to call this function.
+    pub fn opt_level_str(&mut self, opt_level: &str) -> &mut Self {
+        self.gcc.opt_level_str(opt_level);
+        self
+    }
+
+    /// Configures whether the compiler will emit debug information when
+    /// generating object files.
+    ///
+    /// This option is automatically scraped from the `PROFILE` environment
+    /// variable by build scripts (only enabled when the profile is "debug"), so
+    /// it's not required to call this function.
+    pub fn debug(&mut self, debug: bool) -> &mut Self {
+        self.gcc.debug(debug);
+        self
+    }
+
+    // XXX: Add support for custom out_dir
+    //
+    // /// Configures the output directory where all object files and static
+    // /// libraries will be located.
+    // ///
+    // /// This option is automatically scraped from the `OUT_DIR` environment
+    // /// variable by build scripts, so it's not required to call this function.
+    // pub fn out_dir<P: AsRef<Path>>(&mut self, out_dir: P) -> &mut Self {
+    //     self.gcc.out_dir(out_dir);
+    //     self
+    // }
+
+    /// Configures the compiler to be used to produce output.
+    ///
+    /// This option is automatically determined from the target platform or a
+    /// number of environment variables, so it's not required to call this
+    /// function.
+    pub fn compiler<P: AsRef<Path>>(&mut self, compiler: P) -> &mut Self {
+        self.gcc.compiler(compiler);
+        self
+    }
+
+    /// Configures the tool used to assemble archives.
+    ///
+    /// This option is automatically determined from the target platform or a
+    /// number of environment variables, so it's not required to call this
+    /// function.
+    pub fn archiver<P: AsRef<Path>>(&mut self, archiver: P) -> &mut Self {
+        self.gcc.archiver(archiver);
+        self
+    }
+
+    /// Define whether metadata should be emitted for cargo allowing it to
+    /// automatically link the binary. Defaults to `true`.
+    pub fn cargo_metadata(&mut self, cargo_metadata: bool) -> &mut Self {
+        // XXX: Use this to control the cargo metadata which rust-cpp produces
+        self.gcc.cargo_metadata(cargo_metadata);
+        self
+    }
+
+    /// Configures whether the compiler will emit position independent code.
+    ///
+    /// This option defaults to `false` for `i686` and `windows-gnu` targets and
+    /// to `true` for all other targets.
+    pub fn pic(&mut self, pic: bool) -> &mut Self {
+        self.gcc.pic(pic);
+        self
+    }
+
+    /// Extracts `cpp` declarations from the passed-in crate root, and builds
+    /// the associated static library to be linked in to the final binary.
+    ///
+    /// This method does not perform rust codegen - that is performed by `cpp`
+    /// and `cpp_macros`, which perform the actual procedural macro expansion.
+    ///
+    /// This method may technically be called more than once for ergonomic
+    /// reasons, but that usually won't do what you want. Use a different
+    /// `Config` object each time you want to build a crate.
+    pub fn build<P: AsRef<Path>>(&mut self, crate_root: P) {
+        // Clean up any leftover artifacts
+        clean_artifacts();
+
+        // Parse the crate
+        let mut sm = SourceMap::new();
+        let krate = match sm.add_crate_root(crate_root) {
+            Ok(krate) => krate,
+            Err(err) => {
+                warnln!(r#"-- rust-cpp parse error --
 
 There was an error parsing the crate for the rust-cpp build script:
 
@@ -249,29 +451,33 @@ There was an error parsing the crate for the rust-cpp build script:
 
 In order to provide a better error message, the build script will exit
 successfully, such that rustc can provide an error message."#, err);
-            return;
-        }
-    };
+                return;
+            }
+        };
 
-    // Parse the macro definitions
-    let mut visitor = Handle {
-        closures: Vec::new(),
-        snippets: String::new(),
-        sm: &sm,
-    };
-    visitor.visit_crate(&krate);
+        // Parse the macro definitions
+        let mut visitor = Handle {
+            closures: Vec::new(),
+            snippets: String::new(),
+            sm: &sm,
+        };
+        visitor.visit_crate(&krate);
 
-    // Generate the C++ library code
-    let filename = gen_cpp_lib(&visitor);
+        // Generate the C++ library code
+        let filename = gen_cpp_lib(&visitor);
 
-    // Build the C++ library using gcc-rs
-    let mut config = gcc::Config::new();
-    config.cpp(true)
-        .file(filename)
-        .compile(LIB_NAME);
+        // Build the C++ library using gcc-rs
+        self.gcc.file(filename).compile(LIB_NAME);
 
-    // Build the sizes executable which will be run by the macro
-    gen_sizes_exe(&config);
+        // Build the sizes executable which will be run by the macro
+        gen_sizes_exe(&self.gcc);
+    }
+}
+
+/// Run the `cpp` build process on the crate with a root at the given path.
+/// Intended to be used within `build.rs` files.
+pub fn build<P: AsRef<Path>>(path: P) {
+    Config::new().build(path)
 }
 
 struct Handle<'a> {
