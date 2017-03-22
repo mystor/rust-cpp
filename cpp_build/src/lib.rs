@@ -231,8 +231,12 @@ Failed to create output object directory."#);
 }
 
 /// Run the `cpp` build process on the crate with a root at the given path.
-/// Intended to be used within `build.rs` files.
-pub fn build<P: AsRef<Path>>(path: P) {
+/// Intended to be used within `build.rs` files. Call additional methods
+/// on `gcc::Config` by passing an augment_config_func.
+pub fn build_with_augmented_config<P, F>(path: P, augment_config_func: F)
+    where P : AsRef<Path>,
+    F : FnOnce(&mut gcc::Config) -> &mut gcc::Config
+{
     // Clean up any leftover artifacts
     clean_artifacts();
 
@@ -266,12 +270,24 @@ successfully, such that rustc can provide an error message."#, err);
 
     // Build the C++ library using gcc-rs
     let mut config = gcc::Config::new();
-    config.cpp(true)
+    augment_config_func(&mut config)
+        .cpp(true)
         .file(filename)
         .compile(LIB_NAME);
 
     // Build the sizes executable which will be run by the macro
     gen_sizes_exe(&config);
+}
+
+/// Run the `cpp` build process on the crate with a root at the given path.
+/// Intended to be used within `build.rs` files.
+pub fn build<P>(path: P)
+    where P : AsRef<Path>
+{
+    fn no_op(config: &mut gcc::Config) -> &mut gcc::Config {
+        config
+    }
+    build_with_augmented_config(path, no_op)
 }
 
 struct Handle<'a> {
