@@ -86,8 +86,11 @@
 //! }
 //! ```
 
-#[macro_use] #[allow(unused_imports)] extern crate cpp_macros;
-#[doc(hidden)] pub use cpp_macros::*;
+#[macro_use]
+#[allow(unused_imports)]
+extern crate cpp_macros;
+#[doc(hidden)]
+pub use cpp_macros::*;
 
 /// This macro is used to embed arbitrary C++ code. See the module level
 /// documentation for more details.
@@ -97,46 +100,12 @@ macro_rules! cpp {
 
     ([$($captures:tt)*] $($rest:tt)*) => {
         {
-            #[allow(non_camel_case_types, dead_code)]
+            #[allow(unused)]
             #[derive(__cpp_internal_closure)]
-            struct __cpp_closure(cpp! {
-                @TYPE [$($captures)*] $($rest)*
-            });
-            cpp!{@CAPTURES __cpp_closure [] => $($captures)*}
+            enum CppClosureInput {
+                Input = (stringify!([$($captures)*] $($rest)*), 0).1
+            }
+            __cpp_closure_impl![$($captures)*]
         }
     };
-
-    {@CAPTURES $name:ident
-     [$($e:expr),*] =>
-    } => {
-        $name::run($($e),*)
-    };
-
-    {@CAPTURES $name:ident
-     [$($e:expr),*] =>
-     mut $i:ident as $cty:expr , $($rest:tt)*
-    } => {
-        cpp!{@CAPTURES $name [$($e ,)* &mut $i] => $($rest)*}
-    };
-    {@CAPTURES $name:ident
-     [$($e:expr),*] =>
-     mut $i:ident as $cty:expr
-    } => {
-        cpp!{@CAPTURES $name [$($e ,)* &mut $i] =>}
-    };
-
-    {@CAPTURES $name:ident
-     [$($e:expr),*] =>
-     $i:ident as $cty:expr , $($rest:tt)*
-    } => {
-        cpp!{@CAPTURES $name [$($e ,)* &$i] => $($rest)*}
-    };
-    {@CAPTURES $name:ident
-     [$($e:expr),*] =>
-     $i:ident as $cty:expr
-    } => {
-        cpp!{@CAPTURES $name [$($e ,)* &$i] =>}
-    };
-
-    (@TYPE $($rest:tt)*) => { () };
 }
