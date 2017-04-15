@@ -3,9 +3,6 @@
 #[macro_use]
 extern crate cpp;
 
-#[macro_use]
-extern crate cpp_macros;
-
 #[cfg(test)]
 mod inner;
 

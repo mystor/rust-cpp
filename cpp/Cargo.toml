@@ -11,3 +11,4 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp"
 
 [dependencies]
+cpp_macros = { version = "0.2.1", path = "../cpp_macros" }

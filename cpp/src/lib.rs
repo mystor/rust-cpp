@@ -1,6 +1,6 @@
 //! This crate `cpp` only provides a single macro, the `cpp!` macro. This macro
-//! by itself is not useful, but when combined with the `cpp_build` and
-//! `cpp_macro` crates it allows embedding arbitrary C++ code.
+//! by itself is not useful, but when combined with the `cpp_build` crate it
+//! allows embedding arbitrary C++ code.
 //!
 //! There are two variants of the `cpp!` macro. The first variant is used for
 //! raw text inclusion. Text is included into the generated `C++` file in the
@@ -31,9 +31,8 @@
 //!
 //! # Usage
 //!
-//! This crate must be used in tandem with the `cpp_build` and `cpp_macro`
-//! crates. A basic Cargo project which uses these projects would have a
-//! structure like the following:
+//! This crate must be used in tandem with the `cpp_build` crate. A basic Cargo
+//! project which uses these projects would have a structure like the following:
 //!
 //! ```text
 //! crate
@@ -53,7 +52,6 @@
 //!
 //! [dependencies]
 //! cpp = "0.2"
-//! cpp_macros = "0.2"
 //!
 //! [build-dependencies]
 //! cpp_build = "0.2"
@@ -74,8 +72,6 @@
 //! ```ignore
 //! #[macro_use]
 //! extern crate cpp;
-//! #[macro_use]
-//! extern crate cpp_macros;
 //!
 //! cpp!{{
 //!     #include <stdio.h>
@@ -89,6 +85,9 @@
 //!     }
 //! }
 //! ```
+
+#[macro_use] #[allow(unused_imports)] extern crate cpp_macros;
+#[doc(hidden)] pub use cpp_macros::*;
 
 /// This macro is used to embed arbitrary C++ code. See the module level
 /// documentation for more details.

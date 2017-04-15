@@ -9,4 +9,3 @@ cpp_build = { path = "../cpp_build" }
 
 [dependencies]
 cpp = { path = "../cpp" }
-cpp_macros = { path = "../cpp_macros" }
