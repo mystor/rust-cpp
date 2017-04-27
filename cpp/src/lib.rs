@@ -51,10 +51,10 @@
 //! build = "build.rs"
 //!
 //! [dependencies]
-//! cpp = "0.2"
+//! cpp = "0.3"
 //!
 //! [build-dependencies]
-//! cpp_build = "0.2"
+//! cpp_build = "0.3"
 //! ```
 //!
 //! #### build.rs
