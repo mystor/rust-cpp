@@ -12,6 +12,31 @@ use std::hash::{Hash, Hasher};
 
 use syn::{Ident, Ty, Spanned};
 
+pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+pub const LIB_NAME: &'static str = "librust_cpp_generated.a";
+pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
+
+/// This constant is expected to be a unique string within the compiled binary
+/// which preceeds a definition of the metadata. It begins with
+/// rustcpp~metadata, which is printable to make it easier to locate when
+/// looking at a binary dump of the metadata.
+///
+/// NOTE: In the future we may want to use a object file parser and a custom
+/// section rather than depending on this string being unique.
+#[cfg_attr(rustfmt, rustfmt_skip)]
+pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
+    b'r', b'u', b's', b't', b'c', b'p', b'p', b'~',
+    b'm', b'e', b't', b'a', b'd', b'a', b't', b'a',
+    91,  74,  112, 213, 165, 185, 214, 120, 179, 17,  185, 25,  182, 253, 82,  118,
+    148, 29,  139, 208, 59,  153, 78,  137, 230, 54,  26,  177, 232, 121, 132, 166,
+    44,  106, 218, 57,  158, 33,  69,  32,  54,  204, 123, 226, 99,  117, 60,  173,
+    112, 61,  56,  174, 117, 141, 126, 249, 79,  159, 6,   119, 2,   129, 147, 66,
+    135, 136, 212, 252, 231, 105, 239, 91,  96,  232, 113, 94,  164, 255, 152, 144,
+    64,  207, 192, 90,  225, 171, 59,  154, 60,  2,   0,   191, 114, 182, 38,  134,
+    134, 183, 212, 227, 31,  217, 12,  5,   65,  221, 150, 59,  230, 96,  73,  62,
+];
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Capture {
     pub mutable: bool,
@@ -28,12 +53,15 @@ pub struct ClosureSig {
 }
 
 impl ClosureSig {
-    pub fn extern_name(&self) -> Ident {
+    pub fn name_hash(&self) -> u64 {
         // XXX: Use a better hasher than the default?
         let mut hasher = DefaultHasher::new();
         self.hash(&mut hasher);
-        let result = hasher.finish();
-        format!("__cpp_closure_{}", result).into()
+        hasher.finish()
+    }
+
+    pub fn extern_name(&self) -> Ident {
+        format!("__cpp_closure_{}", self.name_hash()).into()
     }
 }
 
@@ -45,12 +73,12 @@ pub struct Closure {
 
 pub enum Macro {
     Closure(Closure),
-    Lit(Spanned<String>)
+    Lit(Spanned<String>),
 }
 
 pub mod parsing {
-    use syn::parse::{ident, string, ty, tt, int};
-    use syn::{Ty, Ident, Spanned, DUMMY_SPAN};
+    use syn::parse::{ident, string, ty, tt};
+    use syn::{Ty, Spanned, DUMMY_SPAN};
     use super::{Capture, ClosureSig, Closure, Macro};
 
     macro_rules! mac_body {
@@ -140,24 +168,4 @@ pub mod parsing {
         map!(tuple!(
             punct!("@"), keyword!("TYPE"), cpp_closure
         ), (|(_, _, x)| x))));
-
-    named!(pub sizes_data -> Vec<(Ident, Vec<(usize, usize)>)>, many0!(do_parse!(
-        name: ident >>
-        nums: many0!(tuple!(int, int)) >>
-        punct!(";") >>
-        ((
-            name,
-            nums.into_iter()
-                .map(|(size, align)| (size.value as usize, align.value as usize))
-                .collect()
-        )))));
-}
-
-pub fn parse_sizes_data(d: &str) -> Vec<(Ident, Vec<(usize, usize)>)> {
-    // XXX: Handle this error better
-    parsing::sizes_data(synom::ParseState::new(d)).expect(r#"
--- rust-cpp fatal error --
-
-Failed to parse size data output in macro parser.
-"#)
 }

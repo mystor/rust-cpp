@@ -19,3 +19,5 @@ cpp_common = { path = "../cpp_common", version = "0.2.1" }
 cpp_synom = { version = "0.12" }
 cpp_syn = { version = "0.12", features=["full", "visit"] }
 quote = "0.3"
+aho-corasick = "0.6"
+byteorder = "1.0"
