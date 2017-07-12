@@ -109,7 +109,7 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
                    }| if mutable {
                      format!("{} & {}", cpp, name)
                  } else {
-                     format!("const {} & {}", cpp, name)
+                     format!("{} const& {}", cpp, name)
                  })
             .collect::<Vec<_>>()
             .join(", ");
