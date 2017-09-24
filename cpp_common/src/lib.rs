@@ -10,7 +10,7 @@ extern crate quote;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use syn::{Ident, Ty, Spanned};
+use syn::{Ident, Spanned, Ty};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -77,9 +77,9 @@ pub enum Macro {
 }
 
 pub mod parsing {
-    use syn::parse::{ident, string, ty, tt};
-    use syn::{Ty, Spanned, DUMMY_SPAN};
-    use super::{Capture, ClosureSig, Closure, Macro};
+    use syn::parse::{ident, string, tt, ty};
+    use syn::{Spanned, Ty, DUMMY_SPAN};
+    use super::{Capture, Closure, ClosureSig, Macro};
 
     macro_rules! mac_body {
         ($i: expr, $submac:ident!( $($args:tt)* )) => {

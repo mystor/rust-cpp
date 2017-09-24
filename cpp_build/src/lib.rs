@@ -19,11 +19,11 @@ extern crate lazy_static;
 
 use std::env;
 use std::path::{Path, PathBuf};
-use std::fs::{remove_dir_all, create_dir, File};
+use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use syn::visit::Visitor;
 use syn::{Mac, Span, Spanned, DUMMY_SPAN};
-use cpp_common::{parsing, Closure, ClosureSig, Capture, Macro, LIB_NAME, STRUCT_METADATA_MAGIC,
+use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, LIB_NAME, STRUCT_METADATA_MAGIC,
                  VERSION};
 use cpp_synmap::SourceMap;
 
@@ -69,10 +69,10 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
     let mut sizealign = vec![];
     for &Closure { ref body, ref sig } in &visitor.closures {
         let &ClosureSig {
-                 ref captures,
-                 ref cpp,
-                 ..
-             } = sig;
+            ref captures,
+            ref cpp,
+            ..
+        } = sig;
 
         let hash = sig.name_hash();
         let name = sig.extern_name();
@@ -81,11 +81,10 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
 
         // Generate the sizes array with the sizes of each of the argument types
         if is_void {
-            sizealign.push(format!("{{
-                {hash}ull,
-                0,
-                1
-            }}", hash=hash));
+            sizealign.push(format!(
+                "{{{hash}ull, 0, 1}}",
+                hash = hash
+            ));
         } else {
             sizealign.push(format!("{{
                 {hash}ull,
@@ -104,40 +103,44 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
         // Generate the parameters and function declaration
         let params = captures
             .iter()
-            .map(|&Capture {
-                       mutable,
-                       ref name,
-                       ref cpp,
-                   }| if mutable {
-                     format!("{} & {}", cpp, name)
-                 } else {
-                     format!("{} const& {}", cpp, name)
-                 })
+            .map(
+                |&Capture {
+                     mutable,
+                     ref name,
+                     ref cpp,
+                 }| if mutable {
+                    format!("{} & {}", cpp, name)
+                } else {
+                    format!("{} const& {}", cpp, name)
+                },
+            )
             .collect::<Vec<_>>()
             .join(", ");
 
         if is_void {
-            write!(output,
-                   r#"
+            write!(
+                output,
+                r#"
 extern "C" {{
 void {name}({params}) {{
 {body}
 }}
 }}
 "#,
-               name = &name,
-               params = params,
-               body = body.node)
-                .unwrap();
+                name = &name,
+                params = params,
+                body = body.node
+            ).unwrap();
         } else {
-            let comma = if params.is_empty() {""} else {","};
+            let comma = if params.is_empty() { "" } else { "," };
             let args = captures
                 .iter()
                 .map(|&Capture { ref name, .. }| name.as_ref())
                 .collect::<Vec<_>>()
                 .join(", ");
-            write!(output,
-                   r#"
+            write!(
+                output,
+                r#"
 static inline {ty} {name}_impl({params}) {{
 {body}
 }}
@@ -147,13 +150,13 @@ void {name}({params}{comma} void* __result) {{
 }}
 }}
 "#,
-               name = &name,
-               params = params,
-               comma = comma,
-               ty = cpp,
-               args = args,
-               body = body.node)
-                .unwrap();
+                name = &name,
+                params = params,
+                comma = comma,
+                ty = cpp,
+                args = args,
+                body = body.node
+            ).unwrap();
         }
     }
 
@@ -162,8 +165,9 @@ void {name}({params}{comma} void* __result) {{
         magic.push(format!("{}", mag));
     }
 
-    write!(output,
-           r#"
+    write!(
+        output,
+        r#"
 
 namespace rustcpp {{
 
@@ -198,27 +202,31 @@ MetaData metadata = {{
 
 }} // namespace rustcpp
 "#,
-           data = sizealign.join(", "),
-           length = sizealign.len(),
-           magic = magic.join(", "),
-           version = VERSION)
-            .unwrap();
+        data = sizealign.join(", "),
+        length = sizealign.len(),
+        magic = magic.join(", "),
+        version = VERSION
+    ).unwrap();
 
     result_path
 }
 
 fn clean_artifacts() {
     if CPP_DIR.is_dir() {
-        remove_dir_all(&*CPP_DIR).expect(r#"
+        remove_dir_all(&*CPP_DIR).expect(
+            r#"
 -- rust-cpp fatal error --
 
-Failed to remove existing build artifacts from output directory."#);
+Failed to remove existing build artifacts from output directory."#,
+        );
     }
 
-    create_dir(&*CPP_DIR).expect(r#"
+    create_dir(&*CPP_DIR).expect(
+        r#"
 -- rust-cpp fatal error --
 
-Failed to create output object directory."#);
+Failed to create output object directory."#,
+    );
 }
 
 /// This struct is for advanced users of the build script. It allows providing
@@ -424,9 +432,11 @@ impl Config {
     /// reasons, but that usually won't do what you want. Use a different
     /// `Config` object each time you want to build a crate.
     pub fn build<P: AsRef<Path>>(&mut self, crate_root: P) {
-        assert_eq!(env!("CARGO_PKG_VERSION"),
-                   VERSION,
-                   "Internal Error: mismatched cpp_common and cpp_build versions");
+        assert_eq!(
+            env!("CARGO_PKG_VERSION"),
+            VERSION,
+            "Internal Error: mismatched cpp_common and cpp_build versions"
+        );
 
         // Clean up any leftover artifacts
         clean_artifacts();
@@ -436,7 +446,8 @@ impl Config {
         let krate = match sm.add_crate_root(crate_root) {
             Ok(krate) => krate,
             Err(err) => {
-                warnln!(r#"-- rust-cpp parse error --
+                warnln!(
+                    r#"-- rust-cpp parse error --
 
 There was an error parsing the crate for the rust-cpp build script:
 
@@ -444,7 +455,8 @@ There was an error parsing the crate for the rust-cpp build script:
 
 In order to provide a better error message, the build script will exit
 successfully, such that rustc can provide an error message."#,
-                        err);
+                    err
+                );
                 return;
             }
         };
