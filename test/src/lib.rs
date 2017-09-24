@@ -9,7 +9,13 @@ mod inner;
 cpp!{{
     #define _USE_MATH_DEFINES
     #include <math.h>
+    #include "src/header.h"
 }}
+
+#[repr(C)]
+struct A {
+    _opaque: [i32; 2],
+}
 
 #[test]
 fn captures() {
@@ -64,5 +70,20 @@ fn plusplus() {
             x++;
         });
         assert_eq!(x, 1);
+    }
+}
+
+#[test]
+fn destructor() {
+    unsafe {
+        let a = cpp!([] -> A as "A" {
+            return A(5, 10);
+        });
+
+        let first = cpp!([a as "A"] -> i32 as "int32_t" {
+            return a.a;
+        });
+
+        assert_eq!(first, 5);
     }
 }
