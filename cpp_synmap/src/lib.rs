@@ -16,7 +16,7 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::{self, Error, ErrorKind};
 use std::path::{Path, PathBuf};
-use syn::{Crate, Item, Attribute, ItemKind, Ident, MetaItem, Lit, LitKind, Span};
+use syn::{Attribute, Crate, Ident, Item, ItemKind, Lit, LitKind, MetaItem, Span};
 use syn::fold::{self, Folder};
 
 /// This constant controls the amount of padding which is created between
@@ -45,7 +45,7 @@ struct FileInfo {
     span: Span,
     path: PathBuf,
     src: String,
-    lines: Vec<usize>
+    lines: Vec<usize>,
 }
 
 /// NOTE: This produces line and column. Line is 1-indexed, column is 0-indexed
@@ -101,8 +101,7 @@ impl SourceMap {
         // Parse the crate with syn
         let mut source = String::new();
         File::open(&path)?.read_to_string(&mut source)?;
-        let krate = syn::parse_crate(&source)
-            .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+        let krate = syn::parse_crate(&source).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
         // Register the read-in file in the SourceMap
         let offset = self.offset;
@@ -137,12 +136,15 @@ impl SourceMap {
 
     fn local_fileinfo(&self, mut span: Span) -> io::Result<(&FileInfo, Span)> {
         if span.lo > span.hi {
-            return Err(Error::new(ErrorKind::InvalidInput,
-                                  "Invalid span object with negative length"));
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "Invalid span object with negative length",
+            ));
         }
         for fi in &self.files {
-            if span.lo >= fi.span.lo && span.lo <= fi.span.hi &&
-                span.hi >= fi.span.lo && span.hi <= fi.span.hi {
+            if span.lo >= fi.span.lo && span.lo <= fi.span.hi && span.hi >= fi.span.lo
+                && span.hi <= fi.span.hi
+            {
                 // Remove the offset
                 span.lo -= fi.span.lo;
                 span.hi -= fi.span.lo;
@@ -150,8 +152,10 @@ impl SourceMap {
                 return Ok((fi, span));
             }
         }
-        Err(Error::new(ErrorKind::InvalidInput,
-                       "Span is not part of any input file"))
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            "Span is not part of any input file",
+        ))
     }
 
     /// Get the filename which contains the given span.
@@ -197,31 +201,38 @@ impl<'a> Walker<'a> {
     fn read_submodule(&mut self, path: PathBuf) -> io::Result<Crate> {
         let faux_crate = self.sm.parse_canonical_file(path)?;
         if faux_crate.shebang.is_some() {
-            return Err(Error::new(ErrorKind::InvalidData,
-                                  "Only the root file of a crate may contain shebangs"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Only the root file of a crate may contain shebangs",
+            ));
         }
 
         Ok(faux_crate)
     }
 
-    fn get_attrs_items(&mut self,
-                       attrs: &[Attribute],
-                       ident: &Ident)
-                       -> io::Result<Crate> {
-        let parent = self.sm.files[self.idx].path.parent()
-            .ok_or(Error::new(ErrorKind::InvalidInput,
-                              "cannot parse file without parent directory"))?
+    fn get_attrs_items(&mut self, attrs: &[Attribute], ident: &Ident) -> io::Result<Crate> {
+        let parent = self.sm.files[self.idx]
+            .path
+            .parent()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "cannot parse file without parent directory",
+            ))?
             .to_path_buf();
 
         // Determine the path of the inner module's file
         for attr in attrs {
             match attr.value {
-                MetaItem::NameValue(ref id, Lit{ node: LitKind::Str(ref s, _), .. }) => {
-                    if id.as_ref() == "path" {
-                        let explicit = parent.join(&s[..]);
-                        return self.read_submodule(explicit);
-                    }
-                }
+                MetaItem::NameValue(
+                    ref id,
+                    Lit {
+                        node: LitKind::Str(ref s, _),
+                        ..
+                    },
+                ) => if id.as_ref() == "path" {
+                    let explicit = parent.join(&s[..]);
+                    return self.read_submodule(explicit);
+                },
                 _ => {}
             }
         }
@@ -237,8 +248,10 @@ impl<'a> Walker<'a> {
             return self.read_submodule(adjacent);
         }
 
-        Err(Error::new(ErrorKind::NotFound,
-                       format!("No file with module definition for `mod {}`", ident)))
+        Err(Error::new(
+            ErrorKind::NotFound,
+            format!("No file with module definition for `mod {}`", ident),
+        ))
     }
 }
 
@@ -251,7 +264,7 @@ impl<'a> Folder for Walker<'a> {
         match item.node {
             ItemKind::Mod(None) => {
                 let (attrs, items) = match self.get_attrs_items(&item.attrs, &item.ident) {
-                    Ok(Crate{ attrs, items, .. }) => (attrs, items),
+                    Ok(Crate { attrs, items, .. }) => (attrs, items),
                     Err(e) => {
                         // Get the file, line, and column information for the
                         // mod statement we're looking at.
@@ -261,15 +274,21 @@ impl<'a> Folder for Walker<'a> {
                             Err(_) => "unknown location".to_owned(),
                         };
 
-                        let e = Error::new(ErrorKind::Other, ModParseErr {
-                            err: e,
-                            msg: format!("Error while parsing `mod {}` \
-                                          statement at {}",
-                                         item.ident, loc)
-                        });
+                        let e = Error::new(
+                            ErrorKind::Other,
+                            ModParseErr {
+                                err: e,
+                                msg: format!(
+                                    "Error while parsing `mod {}` \
+                                     statement at {}",
+                                    item.ident,
+                                    loc
+                                ),
+                            },
+                        );
                         self.error = Some(e);
                         return item;
-                    },
+                    }
                 };
                 item.attrs.extend_from_slice(&attrs);
                 item.node = ItemKind::Mod(Some(items));
