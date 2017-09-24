@@ -228,9 +228,9 @@ Failed to create output object directory."#);
 ///
 /// Internally, `cpp` uses `gcc-rs` to build the compilation artifact, and many
 /// of the methods defined on this type directly proxy to an internal
-/// `gcc::Config` object.
+/// `gcc::Build` object.
 pub struct Config {
-    gcc: gcc::Config,
+    gcc: gcc::Build,
 }
 
 impl Config {
@@ -238,7 +238,7 @@ impl Config {
     /// options which control the build. If you don't need to make any changes,
     /// `cpp_build::build` is a wrapper function around this interface.
     pub fn new() -> Config {
-        let mut gcc = gcc::Config::new();
+        let mut gcc = gcc::Build::new();
         gcc.cpp(true);
         Config { gcc: gcc }
     }
