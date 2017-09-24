@@ -1,6 +1,6 @@
 [package]
 name = "cpp_synmap"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Michael Layzell <michael@thelayzells.com>"]
 description = "Sourcemap and full crate parsing support for `cpp_syn`"
 readme = "README.md"
