@@ -6,6 +6,12 @@ extern crate cpp;
 #[cfg(test)]
 mod inner;
 
+// Test that module resolution works correctly with inline modules.
+#[cfg(test)]
+mod nomod {
+    pub mod inner;
+}
+
 cpp!{{
     #define _USE_MATH_DEFINES
     #include <math.h>
@@ -86,4 +92,9 @@ fn destructor() {
 
         assert_eq!(first, 5);
     }
+}
+
+#[test]
+fn test_nomod() {
+    assert_eq!(nomod::inner::nomod_inner(), 10);
 }

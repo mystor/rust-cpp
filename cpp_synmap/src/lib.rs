@@ -18,6 +18,7 @@ use std::io::{self, Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use syn::{Attribute, Crate, Ident, Item, ItemKind, Lit, LitKind, MetaItem, Span};
 use syn::fold::{self, Folder};
+use std::mem;
 
 /// This constant controls the amount of padding which is created between
 /// consecutive files' span ranges. It is non-zero to ensure that the low byte
@@ -103,6 +104,13 @@ impl SourceMap {
         File::open(&path)?.read_to_string(&mut source)?;
         let krate = syn::parse_crate(&source).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
+        let parent = path.parent()
+            .ok_or(Error::new(
+                ErrorKind::InvalidInput,
+                "cannot parse file without parent directory",
+            ))?
+            .to_path_buf();
+
         // Register the read-in file in the SourceMap
         let offset = self.offset;
         self.offset += source.len() + FILE_PADDING_BYTES;
@@ -119,10 +127,12 @@ impl SourceMap {
         // Walk the parsed Crate object, recursively filling in the bodies of
         // `mod` statements, and rewriting spans to be SourceMap-relative
         // instead of file-relative.
+        let idx = self.files.len() - 1;
         let mut walker = Walker {
-            idx: self.files.len() - 1,
+            idx: idx,
             error: None,
             sm: self,
+            parent: parent,
         };
 
         let krate = walker.fold_crate(krate);
@@ -195,6 +205,7 @@ struct Walker<'a> {
     idx: usize,
     error: Option<Error>,
     sm: &'a mut SourceMap,
+    parent: PathBuf,
 }
 
 impl<'a> Walker<'a> {
@@ -211,15 +222,6 @@ impl<'a> Walker<'a> {
     }
 
     fn get_attrs_items(&mut self, attrs: &[Attribute], ident: &Ident) -> io::Result<Crate> {
-        let parent = self.sm.files[self.idx]
-            .path
-            .parent()
-            .ok_or(Error::new(
-                ErrorKind::InvalidInput,
-                "cannot parse file without parent directory",
-            ))?
-            .to_path_buf();
-
         // Determine the path of the inner module's file
         for attr in attrs {
             match attr.value {
@@ -230,20 +232,20 @@ impl<'a> Walker<'a> {
                         ..
                     },
                 ) => if id.as_ref() == "path" {
-                    let explicit = parent.join(&s[..]);
+                    let explicit = self.parent.join(&s[..]);
                     return self.read_submodule(explicit);
                 },
                 _ => {}
             }
         }
 
-        let mut subdir = parent.join(ident.as_ref());
+        let mut subdir = self.parent.join(ident.as_ref());
         subdir.push("mod.rs");
         if subdir.is_file() {
             return self.read_submodule(subdir);
         }
 
-        let adjacent = parent.join(&format!("{}.rs", ident));
+        let adjacent = self.parent.join(&format!("{}.rs", ident));
         if adjacent.is_file() {
             return self.read_submodule(adjacent);
         }
@@ -291,6 +293,16 @@ impl<'a> Folder for Walker<'a> {
                     }
                 };
                 item.attrs.extend_from_slice(&attrs);
+                item.node = ItemKind::Mod(Some(items));
+                item
+            }
+            ItemKind::Mod(Some(items)) => {
+                let mut parent = self.parent.join(item.ident.as_ref());
+                mem::swap(&mut self.parent, &mut parent);
+
+                let items = items.into_iter().map(|item| self.fold_item(item)).collect();
+
+                mem::swap(&mut self.parent, &mut parent);
                 item.node = ItemKind::Mod(Some(items));
                 item
             }
