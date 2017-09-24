@@ -56,6 +56,13 @@ The OUT_DIR environment variable was not set.
 NOTE: rust-cpp's build function must be run in a build script."#));
 
     static ref CPP_DIR: PathBuf = OUT_DIR.join("rust_cpp");
+
+    static ref CARGO_MANIFEST_DIR: PathBuf =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(r#"
+-- rust-cpp fatal error --
+
+The CARGO_MANIFEST_DIR environment variable was not set.
+NOTE: rust-cpp's build function must be run in a build script."#));
 }
 
 fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
@@ -248,6 +255,7 @@ impl Config {
     pub fn new() -> Config {
         let mut gcc = gcc::Build::new();
         gcc.cpp(true);
+        gcc.include(&*CARGO_MANIFEST_DIR);
         Config { gcc: gcc }
     }
 
