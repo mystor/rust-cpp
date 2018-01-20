@@ -23,7 +23,7 @@ use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use syn::visit::Visitor;
 use syn::{Mac, Span, Spanned, DUMMY_SPAN};
-use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, LIB_NAME, STRUCT_METADATA_MAGIC,
+use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, Class, LIB_NAME, STRUCT_METADATA_MAGIC,
                  VERSION};
 use cpp_synmap::SourceMap;
 
@@ -89,21 +89,23 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
         // Generate the sizes array with the sizes of each of the argument types
         if is_void {
             sizealign.push(format!(
-                "{{{hash}ull, 0, 1}}",
+                "{{{hash}ull, 0, 1, 0}}",
                 hash = hash
             ));
         } else {
             sizealign.push(format!("{{
                 {hash}ull,
                 sizeof({type}),
-                rustcpp::AlignOf<{type}>::value
+                rustcpp::AlignOf<{type}>::value,
+                rustcpp::Flags<{type}>::value
             }}", hash=hash, type=cpp));
         }
         for &Capture { ref cpp, .. } in captures {
             sizealign.push(format!("{{
                 {hash}ull,
                 sizeof({type}),
-                rustcpp::AlignOf<{type}>::value
+                rustcpp::AlignOf<{type}>::value,
+                rustcpp::Flags<{type}>::value
             }}", hash=hash, type=cpp));
         }
 
@@ -167,6 +169,36 @@ void {name}({params}{comma} void* __result) {{
         }
     }
 
+    for class in &visitor.classes {
+        let hash = class.name_hash();
+
+        // Generate the sizes array
+        sizealign.push(format!("{{
+                {hash}ull,
+                sizeof({type}),
+                rustcpp::AlignOf<{type}>::value,
+                rustcpp::Flags<{type}>::value
+            }}", hash=hash, type=class.cpp));
+
+        // Generate constructor
+        write!(
+            output,
+            r#"
+extern "C" {{
+void __cpp_destructor_{hash}(void *ptr) {{
+    typedef {cpp_name} T;
+    static_cast< {cpp_name} *>(ptr)->~T();
+}}
+void __cpp_copy_{hash}(const void *src, void *dest) {{
+    new (dest) {cpp_name} (*static_cast<{cpp_name} const*>(src));
+}}
+}}
+"#,
+            hash = hash,
+            cpp_name = class.cpp
+        ).unwrap();
+    }
+
     let mut magic = vec![];
     for mag in STRUCT_METADATA_MAGIC.iter() {
         magic.push(format!("{}", mag));
@@ -187,10 +219,22 @@ struct AlignOf {{
     static const uintptr_t value = sizeof(Inner) - sizeof(T);
 }};
 
+template<typename T>
+struct Flags {{
+    static const uintptr_t value =
+#if __cplusplus > 199711L
+        (std::is_trivially_destructible<T>::value << 0) |
+        (std::is_trivially_copyable<T>::value << 1) |
+#endif
+        0;
+}};
+
+
 struct SizeAlign {{
     uint64_t hash;
     uint64_t size;
     uint64_t align;
+    uint64_t flags;
 }};
 
 struct MetaData {{
@@ -472,6 +516,7 @@ successfully, such that rustc can provide an error message."#,
         // Parse the macro definitions
         let mut visitor = Handle {
             closures: Vec::new(),
+            classes: Vec::new(),
             snippets: String::new(),
             sm: &sm,
         };
@@ -493,6 +538,7 @@ pub fn build<P: AsRef<Path>>(path: P) {
 
 struct Handle<'a> {
     closures: Vec<Closure>,
+    classes: Vec<Class>,
     snippets: String,
     sm: &'a SourceMap,
 }
@@ -537,6 +583,18 @@ impl<'a> Visitor for Handle<'a> {
                     self.snippets.push_str(&l.node);
                 }
             }
+        }
+        if mac.path.segments[0].ident.as_ref() == "cpp_class" {
+            let tts = &mac.tts;
+            assert!(tts.len() >= 1);
+            let span = Span {
+                lo: tts[0].span().lo,
+                hi: tts[tts.len() - 1].span().hi,
+            };
+            let src = self.sm.source_text(span).unwrap();
+            let input = synom::ParseState::new(&src);
+            let class = parsing::class_macro(input).expect("cpp_class! macro");
+            self.classes.push(class);
         }
     }
 }
