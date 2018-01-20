@@ -28,7 +28,7 @@ pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
 pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
     b'r', b'u', b's', b't', b'c', b'p', b'p', b'~',
     b'm', b'e', b't', b'a', b'd', b'a', b't', b'a',
-    91,  74,  112, 213, 165, 185, 214, 120, 179, 17,  185, 25,  182, 253, 82,  118,
+    92,  74,  112, 213, 165, 185, 214, 120, 179, 17,  185, 25,  182, 253, 82,  118,
     148, 29,  139, 208, 59,  153, 78,  137, 230, 54,  26,  177, 232, 121, 132, 166,
     44,  106, 218, 57,  158, 33,  69,  32,  54,  204, 123, 226, 99,  117, 60,  173,
     112, 61,  56,  174, 117, 141, 126, 249, 79,  159, 6,   119, 2,   129, 147, 66,
@@ -71,6 +71,22 @@ pub struct Closure {
     pub body: Spanned<String>,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct Class {
+    pub name: Ident,
+    pub cpp: String,
+    pub public: bool
+}
+
+impl Class {
+    pub fn name_hash(&self) -> u64 {
+        // XXX: Use a better hasher than the default?
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
+}
+
 pub enum Macro {
     Closure(Closure),
     Lit(Spanned<String>),
@@ -78,8 +94,8 @@ pub enum Macro {
 
 pub mod parsing {
     use syn::parse::{ident, string, tt, ty};
-    use syn::{Spanned, Ty, DUMMY_SPAN};
-    use super::{Capture, Closure, ClosureSig, Macro};
+    use syn::{Spanned, Ty, DUMMY_SPAN, Ident};
+    use super::{Capture, Closure, ClosureSig, Macro, Class};
 
     macro_rules! mac_body {
         ($i: expr, $submac:ident!( $($args:tt)* )) => {
@@ -95,10 +111,12 @@ pub mod parsing {
         };
     }
 
+    named!(ident_or_self -> Ident, alt!( ident | keyword!("self") => { |_| "self".into() } ));
+
     named!(name_as_string -> Capture,
            do_parse!(
                is_mut: option!(keyword!("mut")) >>
-                   id: ident >>
+                   id: ident_or_self >>
                    keyword!("as") >>
                    cty: string >>
                    (Capture {
@@ -168,4 +186,19 @@ pub mod parsing {
         map!(tuple!(
             punct!("@"), keyword!("TYPE"), cpp_closure
         ), (|(_, _, x)| x))));
+
+    named!(pub cpp_class -> Class,
+           do_parse!(
+            is_pub: option!(keyword!("pub")) >>
+            keyword!("struct") >>
+            name: ident >>
+            punct!(",") >>
+            cpp_type: string >>
+            (Class {
+                name: name,
+                cpp: cpp_type.value,
+                public: is_pub.is_some(),
+            })));
+
+    named!(pub class_macro -> Class , mac_body!(cpp_class));
 }

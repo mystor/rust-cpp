@@ -109,3 +109,54 @@ macro_rules! cpp {
         }
     };
 }
+
+#[doc(hidden)]
+pub trait CppTrait {
+    type BaseType;
+    const ARRAY_SIZE: usize;
+    const CPP_TYPE: &'static str;
+}
+
+/// This macro allow to wrap a relocatable C++ struct or class that might
+/// have destructor or copy constructor, and instantiate the Drop and Clone
+/// trait appropriately.
+///
+/// ```ignore
+/// cpp_class!(pub struct MyClass, "MyClass");
+/// impl MyClass {
+///     fn new() -> Self {
+///         unsafe { cpp!([] -> MyClass as "MyClass" { return MyClass(); }) }
+///     }
+///     fn member_function(&self, param : i32) -> i32 {
+///         unsafe { cpp!([self as "const MyClass*", param as "int"] -> i32 as "int" {
+///             return self->member_function(param);
+///         }) }
+///     }
+/// }
+/// ```
+///
+/// This will create a rust struct MyClass, which has the same size and
+/// alignement as the the C++ class "MyClass". It will also call the destructor
+/// of MyClass on drop, and its copy constructor on clone.
+///
+/// Warning: This only work if the C++ class can be moved in memory (using
+/// memcpy). This disallow most classes from the standard library.
+///
+#[macro_export]
+macro_rules! cpp_class {
+    (struct $name:ident, $type:expr) => {
+        #[derive(__cpp_internal_class)]
+        #[repr(C)]
+        struct $name {
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(struct $name, $type), 0).1]
+        }
+    };
+    (pub struct $name:ident, $type:expr) => {
+        #[derive(__cpp_internal_class)]
+        #[repr(C)]
+        pub struct $name {
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(pub struct $name, $type), 0).1]
+        }
+    };
+}
+
