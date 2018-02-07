@@ -29,6 +29,39 @@
 //! });
 //! ```
 //!
+//! ## rust! pseudo-macro
+//!
+//! The first variant of the cpp! macro can contain, in the C++ code, a rust! sub-
+//! macro, which allows to include rust code in C++ code. This is useful to
+//! implement callback or override virtual functions. Example:
+//!
+//! ```ignore
+//! trait MyTrait {
+//!    fn compute_value(&self, x : i32) -> i32;
+//! }
+//!
+//! cpp!{{
+//!    struct TraitPtr { void *a,*b; };
+//!    class MyClassImpl : public MyClass {
+//!      public:
+//!        TraitPtr m_trait;
+//!        int computeValue(int x) const override {
+//!            return rust!(MCI_computeValue [m_trait : &MyTrait as "TraitPtr", x : i32 as "int"]
+//!                -> i32 as "int" {
+//!                m_trait.compute_value(x)
+//!            });
+//!        }
+//!    }
+//! }}
+//! ```
+//!
+//! The syntax for the rust! macro is:
+//! ```ignore
+//! rust!($uniq_ident:ident [$($arg_name:ident : $arg_rust_type:ty as $arg_c_type:tt),*]
+//!      $(-> $ret_rust_type:ty as $rust_c_type:tt)* {$($body:tt)*})
+//! ```
+//! uniq_ident is an unique identifier which will be used to name the extern function
+//!
 //! # Usage
 //!
 //! This crate must be used in tandem with the `cpp_build` crate. A basic Cargo
@@ -92,12 +125,64 @@ extern crate cpp_macros;
 #[doc(hidden)]
 pub use cpp_macros::*;
 
+/// Internal macro which is used to locate the rust! invocations in the
+/// C++ code embbeded in cpp! invocation, to translate them into extern
+/// functions
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cpp_internal {
+    (@find_rust_macro rust!($($rust_body:tt)*) $($rest:tt)*) => {
+        __cpp_internal!{ @expand_rust_macro $($rust_body)* }
+        __cpp_internal!{ @find_rust_macro $($rest)* }
+    };
+    (@find_rust_macro ( $($in:tt)* ) $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
+    (@find_rust_macro [ $($in:tt)* ] $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
+    (@find_rust_macro { $($in:tt)* } $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
+    (@find_rust_macro $t:tt $($rest:tt)*) =>
+        { __cpp_internal!{ @find_rust_macro $($rest)* } };
+    (@find_rust_macro) => {};
+
+    (@expand_rust_macro $i:ident [$($an:ident : $at:ty as $ac:tt),*] {$($body:tt)*}) => {
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn $i($($an : *const $at),*) {
+            $(let $an : $at = unsafe { $an.read() };)*
+            { $($body)* }
+            $(::std::mem::forget($an);)*
+
+        }
+    };
+    (@expand_rust_macro $i:ident [$($an:ident : $at:ty as $ac:tt),*] -> $rt:ty as $rc:tt {$($body:tt)*}) => {
+        #[no_mangle]
+        #[doc(hidden)]
+        pub extern "C" fn $i($($an : *const $at, )* rt : *mut $rt) -> *mut $rt {
+            $(let $an : $at = unsafe { $an.read() };)*
+            {
+                #[allow(unused_mut)]
+                let mut lambda = || {$($body)*};
+                unsafe { std::ptr::write(rt, lambda()) };
+            }
+            $(::std::mem::forget($an);)*
+            rt
+        }
+    };
+
+    (@expand_rust_macro $($invalid:tt)*) => {
+        compile_error!(concat!( "Cannot parse rust! macro: ", stringify!([ $($invalid)* ]) ))
+    };
+}
+
 /// This macro is used to embed arbitrary C++ code. See the module level
 /// documentation for more details.
 #[macro_export]
 macro_rules! cpp {
-    ({$($body:tt)*}) => { /* Raw text inclusion */ };
+    // raw text inclusion
+    ({$($body:tt)*}) => { __cpp_internal!{ @find_rust_macro $($body)*} };
 
+    // inline closure
     ([$($captures:tt)*] $($rest:tt)*) => {
         {
             #[allow(unused)]

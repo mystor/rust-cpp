@@ -5,9 +5,9 @@
 //! documentation](https://docs.rs/cpp).
 
 extern crate cpp_common;
-
+#[macro_use]
 extern crate cpp_synom as synom;
-
+#[macro_use]
 extern crate cpp_syn as syn;
 
 extern crate cpp_synmap;
@@ -46,8 +46,41 @@ const INTERNAL_CPP_STRUCTS: &'static str = r#"
 #include <new> // For placement new
 #include <cstdlib> // For abort
 #include <type_traits>
+#include <utility>
 
 namespace rustcpp {
+
+// We can't just pass or return any type from extern "C" rust functions (because the call
+// convention may differ between the C++ type, and the rust type).
+// So we make sure to pass trivial structure that only contains a pointer to the object we want to
+// pass. The constructor of these helper class contains a 'container' of the right size which will
+// be allocated on the stack.
+template<typename T> struct return_helper {
+    struct container {
+#if defined (_MSC_VER) && (_MSC_VER + 0 < 1900)
+        char memory[sizeof(T)];
+        ~container() { reinterpret_cast<T*>(this)->~T(); }
+#else
+        // The fact that it is in an union means it is properly sized and aligned, but we have
+        // to call the destructor and constructor manually
+        union { T memory; };
+        ~container() { memory.~T(); }
+#endif
+        container() {}
+    };
+    const container* data;
+    return_helper(int, const container &c = container()) : data(&c) { }
+};
+
+template<typename T> struct argument_helper {
+    using type = const T&;
+};
+template<typename T> struct argument_helper<T&> {
+    T &ref;
+    argument_helper(T &x) : ref(x) {}
+    using type = argument_helper<T&> const&;
+};
+
 template<typename T>
 typename std::enable_if<std::is_copy_constructible<T>::value>::type copy_helper(const void *src, void *dest)
 { new (dest) T (*static_cast<T const*>(src)); }
@@ -86,6 +119,101 @@ NOTE: rust-cpp's build function must be run in a build script."#));
 
 The CARGO_MANIFEST_DIR environment variable was not set.
 NOTE: rust-cpp's build function must be run in a build script."#));
+}
+
+// Given a string containing some C++ code with a rust! macro,
+// this functions expand the rust! macro to a call to an extern
+// function, and return a tuple with the expanded C++ code, and
+// a declaration of the extern "C" function.
+fn expand_sub_rust_macro(input : String) -> (String, String) {
+    let mut result = input;
+    let mut extern_decl = String::new();
+
+    use syn::parse::{ident, string, tt, ty};
+    use synom::IResult::Done;
+
+    struct RustInvocation {
+        begin: usize,
+        end: usize,
+        id: String,
+        return_type: Option<String>,
+        arguments: Vec<(String, String)>, // Vec of type and name pair
+    };
+
+    named!(rust_macro_argument -> (String, String),
+            do_parse!(
+                name: ident >>
+                punct!(":") >>
+                ty >>
+                keyword!("as") >>
+                cty: string >>
+                ((name.as_ref().to_owned(), cty.value))));
+
+    named!(find_rust_macro -> RustInvocation,
+            do_parse!(
+                take_until!("rust!") >>
+                begin: spanned!(keyword!("rust")) >>
+                punct!("!") >>
+                punct!("(") >>
+                id: ident >>
+                punct!("[") >>
+                args: separated_list!(punct!(","), rust_macro_argument) >>
+                punct!("]") >>
+                rty : option!(do_parse!(punct!("->") >>
+                        ty >>
+                        keyword!("as") >>
+                        cty: string >>
+                        (cty.value))) >>
+                tt >>
+                end: spanned!(punct!(")")) >>
+                (RustInvocation{ begin: begin.span.lo, end: end.span.hi, id: id.as_ref().to_owned(),
+                                 return_type: rty,  arguments: args })));
+
+    loop {
+        let tmp = result.clone();
+        if let Done(_,rust_invocation) = find_rust_macro(synom::ParseState::new(&tmp)) {
+
+            let decl_types = rust_invocation.arguments.iter().map(|&(_, ref val)| {
+                    format!("rustcpp::argument_helper<{}>::type", val)
+                }).collect::<Vec<_>>().join(", ");
+            let call_args = rust_invocation.arguments.iter().map(|&(ref val, _)| val.as_ref()).collect::<Vec<_>>().join(", ");
+
+            let fn_call = match rust_invocation.return_type {
+                None => {
+                    extern_decl.push_str(&format!("extern \"C\" void {id} ({types});\n",
+                        id = &rust_invocation.id, types = decl_types));
+                    format!("{id}({args})", id = rust_invocation.id, args = call_args)
+                }
+                Some(rty) => {
+                    if decl_types.is_empty() {
+                        extern_decl.push_str(&format!(
+                            "extern \"C\" {rty} *{id} (rustcpp::return_helper<{rty}> = 0);\n",
+                            rty = rty,  id = rust_invocation.id));
+
+                    } else {
+                        extern_decl.push_str(&format!(
+                            "extern \"C\" {rty} *{id} ({types}, rustcpp::return_helper<{rty}> = 0);\n",
+                            rty = rty,  id = rust_invocation.id, types = decl_types));
+                    }
+                    format!("std::move(*{id}({args}))", id = rust_invocation.id, args = call_args)
+                }
+            };
+
+            let fn_call = {
+                // remove the rust! macro from the C++ snippet
+                let orig = result.drain(rust_invocation.begin .. rust_invocation.end);
+                // add \ņ to the invocation in order to keep the same amount of line numbers
+                // so errors point to the right line.
+                orig.filter(|x| *x == '\n').fold(fn_call, |mut res, _| {res.push('\n'); res})
+            };
+            // add the invocation of call where the rust! macro used to be.
+            result.insert_str(rust_invocation.begin, &fn_call);
+        } else {
+            break;
+        }
+    }
+
+    return (result, extern_decl);
 }
 
 fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
@@ -631,7 +759,9 @@ impl<'a> Visitor for Handle<'a> {
                 Macro::Lit(mut l) => {
                     extract_with_span(&mut l, &src, span.lo, self.sm);
                     self.snippets.push('\n');
-                    self.snippets.push_str(&l.node);
+                    let (snip, extern_decl) = expand_sub_rust_macro(l.node.clone());
+                    self.snippets.push_str(&extern_decl);
+                    self.snippets.push_str(&snip);
                 }
             }
         }

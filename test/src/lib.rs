@@ -1,3 +1,4 @@
+#![recursion_limit="512"]
 #![cfg_attr(not(test), allow(dead_code, unused_imports))]
 
 #[macro_use]
@@ -12,15 +13,28 @@ mod nomod {
     pub mod inner;
 }
 
+fn add_two(x: i32) -> i32 {
+    x + 2
+}
+
 cpp!{{
     #define _USE_MATH_DEFINES
     #include <math.h>
     #include "src/header.h"
     #include <map>
     #include <iostream>
+
+    int callRust1(int x)  {
+        return rust!(addTwoCallback [x : i32 as "int"] -> i32 as "int" { add_two(x) });
+    }
+    void *callRust2(void *ptr)  {
+        int a = 3;
+        return rust!(ptrCallback [ptr : *mut u32 as "void*", a : u32 as "int"] -> *mut u32 as "void *"
+        { unsafe {*ptr += a}; return ptr; });
+    }
 }}
 
-cpp_class!(unsafe struct A as "A");
+cpp_class!(pub unsafe struct A as "A");
 impl A {
     fn new(a : i32, b: i32) -> Self {
         unsafe {
@@ -46,6 +60,46 @@ impl A {
         }
     }
 }
+
+cpp!{{
+    bool callRust3(const A &a, int val)  {
+        A a2 = rust!(ACallback [a : A as "A", val : i32 as "int"] -> A as "A"
+        {
+            let mut a2 = a.clone();
+            a2.set_values(a.multiply(), val);
+            a2
+        });
+        return a2.a == a.a*a.b && a2.b == val;
+    }
+
+    int manyOtherTest() {
+        int val = 32;
+        int *v = &val;
+        // returns void
+        rust!(xx___1 [v : &mut i32 as "int*"] { *v = 43; } );
+        if (val != 43) return 1;
+        rust!(xx___2 [val : &mut i32 as "int&"] { assert!(*val == 43); *val = 54; } );
+        if (val != 54) return 2;
+        rust!(xx___3 [v : *mut i32 as "int*"] { unsafe {*v = 73;} } );
+        if (val != 73) return 3;
+        rust!(xx___4 [val : *mut i32 as "int&"] { unsafe { assert!(*val == 73); *val = 62; }} );
+        if (val != 62) return 4;
+        rust!(xx___5 [val : *const i32 as "const int&"] { unsafe { assert!(*val == 62); }} );
+        rust!(xx___6 [val : &i32 as "const int&"] { assert!(*val == 62); } );
+        rust!(xx___7 [val : i32 as "int"] { let v = val; assert!(v == 62); } );
+        // operations on doubles
+        double fval = 5.5;
+        double res = rust!(xx___8 [fval : f64 as "double"] -> f64 as "double" { fval * 1.2 + 9.9 } );
+        if (int((res - (5.5 * 1.2 + 9.9)) * 100000) != 0) return 5;
+        res = rust!(xx___9 [fval : &mut f64 as "double&"] -> f64 as "double" { *fval = *fval * 2.2; 8.8 } );
+        if (int((res - (8.8)) * 100000) != 0) return 9;
+        if (int((fval - (5.5 * 2.2)) * 100000) != 0) return 10;
+        // with a class
+        A a(3,4);
+        rust!(xx___10 [a : A as "A"] { let a2 = a.clone(); assert!(a2.multiply() == 12); } );
+        return 0;
+    }
+}}
 
 
 #[test]
@@ -203,4 +257,76 @@ fn move_only() {
 #[test]
 fn test_nomod() {
     assert_eq!(nomod::inner::nomod_inner(), 10);
+}
+
+#[test]
+fn rust_submacro() {
+    let result = unsafe { cpp!([] -> i32 as "int" { return callRust1(45); }) };
+    assert_eq!(result, 47); // callRust1 adds 2
+
+    let mut val : u32 = 18;
+    {
+        let val_ref = &mut val;
+        let result = unsafe { cpp!([val_ref as "void*"] -> bool as "bool" {
+            return callRust2(val_ref) == val_ref;
+        }) };
+        assert_eq!(result, true);
+    }
+    assert_eq!(val, 21); // callRust2 does +=3
+
+    let result = unsafe { cpp!([]->bool as "bool" {
+        A a(5, 3);
+        return callRust3(a, 18);
+    })};
+    assert!(result);
+
+    let result = unsafe { cpp!([]->u32 as "int" {
+        return manyOtherTest();
+    })};
+    assert_eq!(result, 0);
+}
+
+
+pub trait MyTrait {
+    fn compute_value(&self, x : i32) -> i32;
+}
+
+cpp!{{
+    struct MyClass {
+        virtual int computeValue(int) const = 0;
+    };
+    int operate123(MyClass *callback) { return callback->computeValue(123); }
+
+    struct TraitPtr { void *a,*b; };
+}}
+cpp!{{
+    class MyClassImpl : public MyClass {
+      public:
+        TraitPtr m_trait;
+        int computeValue(int x) const /*override*/ {
+           return rust!(MCI_computeValue [m_trait : &MyTrait as "TraitPtr", x : i32 as "int"]
+               -> i32 as "int" {
+               m_trait.compute_value(x)
+           });
+       }
+   };
+}}
+
+struct MyTraitImpl {
+    x : i32
+}
+impl MyTrait for MyTraitImpl {
+    fn compute_value(&self, x: i32) -> i32 { self.x + x }
+}
+
+#[test]
+fn rust_submacro_trait() {
+    let inst = MyTraitImpl{ x: 333 };
+    let inst_ptr : &MyTrait = &inst;
+    let i = unsafe { cpp!([inst_ptr as "TraitPtr"] -> u32 as "int" {
+        MyClassImpl mci;
+        mci.m_trait = inst_ptr;
+        return operate123(&mci);
+    })};
+    assert_eq!(i, 123 + 333);
 }
