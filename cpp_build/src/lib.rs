@@ -200,7 +200,11 @@ struct MetaData {{
     SizeAlign data[{length}];
 }};
 
-MetaData metadata = {{
+MetaData
+#ifdef __GNUC__
+    __attribute__((weak))
+#endif
+    metadata = {{
     {{ {magic} }},
     "{version}",
     {length},
