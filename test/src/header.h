@@ -4,10 +4,18 @@
 #include <cassert>
 #include <iostream>
 
+#if __cplusplus > 199711L
+#include <atomic>
+typedef std::atomic<int> counter_t;
+#define COUNTER_STATIC static
+#else
+typedef int counter_t;
+#endif
+
 // This counter is incremented by destructors and constructors
 // and must be 0 at the end of the program
-inline int &counter() {
-    static int counter = 0;
+inline counter_t &counter() {
+    static counter_t counter;
     struct CheckCounter {
         ~CheckCounter() {
             assert(counter == 0);
