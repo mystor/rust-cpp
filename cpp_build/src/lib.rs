@@ -454,16 +454,17 @@ impl Config {
         let krate = match sm.add_crate_root(crate_root) {
             Ok(krate) => krate,
             Err(err) => {
+                let mut err_s = err.to_string();
+                if let Some(i) = err_s.find("unparsed tokens after") {
+                    // Strip the long error message from syn
+                    err_s = err_s[0..i].to_owned();
+                }
                 warnln!(
                     r#"-- rust-cpp parse error --
-
 There was an error parsing the crate for the rust-cpp build script:
-
 {}
-
-In order to provide a better error message, the build script will exit
-successfully, such that rustc can provide an error message."#,
-                    err
+In order to provide a better error message, the build script will exit successfully, such that rustc can provide an error message."#,
+                    err_s
                 );
                 return;
             }
