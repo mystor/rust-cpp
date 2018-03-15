@@ -171,6 +171,33 @@ fn simple_class() {
     *b.a() = 45;
     let mut b2 = b;
     assert_eq!(*b2.a(), 45);
+
+    let mut b3 = B::default();
+    assert_eq!(*b3.a(), 0);
+    assert_eq!(*b3.b(), 0);
+}
+
+#[test]
+fn move_only() {
+    cpp_class!(struct MoveOnly, "MoveOnly");
+    impl MoveOnly {
+        fn data(&self) -> &A {
+            unsafe {
+                return cpp!([self as "MoveOnly*"] -> &A as "A*" {
+                    return &self->data;
+                });
+            }
+        }
+    }
+    let mo1 = MoveOnly::default();
+    assert_eq!(mo1.data().multiply(), 8*9);
+    let mut mo2 = mo1;
+    let mo3 = unsafe { cpp!([mut mo2 as "MoveOnly"] -> MoveOnly as "MoveOnly" {
+        mo2.data.a = 7;
+        return MoveOnly(3,2);
+    })};
+    assert_eq!(mo2.data().multiply(), 7*9);
+    assert_eq!(mo3.data().multiply(), 3*2);
 }
 
 #[test]

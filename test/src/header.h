@@ -35,4 +35,16 @@ struct B {
   int b;
 };
 
+struct MoveOnly {
+    MoveOnly(int a = 8, int b = 9) : data(a,b) { }
+#if __cplusplus > 199711L
+    MoveOnly(const MoveOnly &) = delete ;
+    MoveOnly& operator=(const MoveOnly &) = delete ;
+    MoveOnly(MoveOnly &&other) : data(other.data) { }
+    MoveOnly& operator=(MoveOnly &&other) { data = other.data; return *this; }
+#endif
+    A data;
+};
+
+
 #endif // defined(header_h__)

@@ -17,6 +17,14 @@ pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const LIB_NAME: &'static str = "librust_cpp_generated.a";
 pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
 
+pub mod flags {
+    pub const IS_COPY_CONSTRUCTIBLE : u32 = 0;
+    pub const IS_DEFAULT_CONSTRUCTIBLE : u32 = 1;
+    pub const IS_TRIVIALLY_DESTRUCTIBLE : u32 = 2;
+    pub const IS_TRIVIALLY_COPYABLE : u32 = 3;
+    pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE : u32 = 4;
+}
+
 /// This constant is expected to be a unique string within the compiled binary
 /// which preceeds a definition of the metadata. It begins with
 /// rustcpp~metadata, which is printable to make it easier to locate when

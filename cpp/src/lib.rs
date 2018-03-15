@@ -136,8 +136,10 @@ pub trait CppTrait {
 /// ```
 ///
 /// This will create a rust struct MyClass, which has the same size and
-/// alignement as the the C++ class "MyClass". It will also call the destructor
-/// of MyClass on drop, and its copy constructor on clone.
+/// alignement as the the C++ class "MyClass". It will also implement the Drop trait
+/// calling the destructor, the Clone trait calling the copy constructor, if the
+/// class is copyable (or Copy if it is trivialy copyable), and Default if the class
+/// is default constructible
 ///
 /// Warning: This only work if the C++ class can be moved in memory (using
 /// memcpy). This disallow most classes from the standard library.
