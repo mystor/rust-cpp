@@ -751,7 +751,7 @@ impl<'a> Visitor for Handle<'a> {
             };
             let src = self.sm.source_text(span).unwrap();
             let input = synom::ParseState::new(&src);
-            match parsing::build_macro(input).expect("cpp! macro") {
+            match parsing::build_macro(input).expect(&format!("cpp! macro at {}", self.sm.locinfo(span).unwrap())) {
                 Macro::Closure(mut c) => {
                     extract_with_span(&mut c.body, &src, span.lo, self.sm);
                     self.closures.push(c);
@@ -774,7 +774,7 @@ impl<'a> Visitor for Handle<'a> {
             };
             let src = self.sm.source_text(span).unwrap();
             let input = synom::ParseState::new(&src);
-            let mut class = parsing::class_macro(input).expect("cpp_class! macro");
+            let mut class = parsing::class_macro(input).expect(&format!("cpp_class! macro at {}", self.sm.locinfo(span).unwrap()));
             class.line = line_directive(span, self.sm);
             self.classes.push(class);
         }
