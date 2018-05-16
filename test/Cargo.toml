@@ -1,7 +1,7 @@
 [package]
 name = "cpp_test"
 version = "0.1.0"
-authors = ["Michael Layzell <michael@thelayzells.com>"]
+authors = ["Nika Layzell <nika@thelayzells.com>"]
 build = "build.rs"
 
 [build-dependencies]
