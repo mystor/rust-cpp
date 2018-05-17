@@ -121,6 +121,12 @@ pub trait CppTrait {
 /// have destructor or copy constructor, and instantiate the Drop and Clone
 /// trait appropriately.
 ///
+/// Warning: This only work if the C++ class that are relocatable, i.e., that
+/// can be moved in memory using memmove.
+/// This disallows most classes from the standard library.
+/// This restriction exists because rust is allowed to move your types around.
+/// Most C++ types that do not contain self-references or
+///
 /// ```ignore
 /// cpp_class!(pub struct MyClass as "MyClass");
 /// impl MyClass {
@@ -136,13 +142,10 @@ pub trait CppTrait {
 /// ```
 ///
 /// This will create a rust struct MyClass, which has the same size and
-/// alignement as the the C++ class "MyClass". It will also implement the Drop trait
+/// alignment as the the C++ class "MyClass". It will also implement the Drop trait
 /// calling the destructor, the Clone trait calling the copy constructor, if the
-/// class is copyable (or Copy if it is trivialy copyable), and Default if the class
+/// class is copyable (or Copy if it is trivially copyable), and Default if the class
 /// is default constructible
-///
-/// Warning: This only work if the C++ class can be moved in memory (using
-/// memcpy). This disallow most classes from the standard library.
 ///
 #[macro_export]
 macro_rules! cpp_class {
