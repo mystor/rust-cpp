@@ -83,7 +83,7 @@ pub struct Closure {
 pub struct Class {
     pub name: Ident,
     pub cpp: String,
-    pub public: bool
+    pub public: bool,
 }
 
 impl Class {
