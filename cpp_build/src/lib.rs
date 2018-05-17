@@ -44,6 +44,7 @@ const INTERNAL_CPP_STRUCTS: &'static str = r#"
 
 #include "stdint.h" // For {u}intN_t
 #include <new> // For placement new
+#include <cstdlib> // For abort
 
 #if __cplusplus <= 199711L && !defined(_MSC_VER)
 namespace rustcpp {
@@ -81,12 +82,14 @@ template<typename T>
 typename enable_if<is_copy_constructible<T>::value>::type copy_helper(const void *src, void *dest)
 { new (dest) T (*static_cast<T const*>(src)); }
 template<typename T>
-typename enable_if<!is_copy_constructible<T>::value>::type copy_helper(const void *, void *) { }
+typename enable_if<!is_copy_constructible<T>::value>::type copy_helper(const void *, void *)
+{ std::abort(); }
 template<typename T>
 typename enable_if<is_default_constructible<T>::value>::type default_helper(void *dest)
 { new (dest) T(); }
 template<typename T>
-typename enable_if<!is_default_constructible<T>::value>::type default_helper(void *) { }
+typename enable_if<!is_default_constructible<T>::value>::type default_helper(void *)
+{ std::abort(); }
 }
 
 "#;
@@ -231,7 +234,7 @@ void {name}({params}{comma} void* __result) {{
 extern "C" {{
 void __cpp_destructor_{hash}(void *ptr) {{
     typedef {cpp_name} T;
-    static_cast< {cpp_name} *>(ptr)->~T();
+    static_cast<T*>(ptr)->~T();
 }}
 void __cpp_copy_{hash}(const void *src, void *dest) {{
     rustcpp::copy_helper<{cpp_name}>(src, dest);
