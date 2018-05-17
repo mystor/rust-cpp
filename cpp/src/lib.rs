@@ -122,7 +122,7 @@ pub trait CppTrait {
 /// trait appropriately.
 ///
 /// ```ignore
-/// cpp_class!(pub struct MyClass, "MyClass");
+/// cpp_class!(pub struct MyClass as "MyClass");
 /// impl MyClass {
 ///     fn new() -> Self {
 ///         unsafe { cpp!([] -> MyClass as "MyClass" { return MyClass(); }) }
@@ -146,18 +146,18 @@ pub trait CppTrait {
 ///
 #[macro_export]
 macro_rules! cpp_class {
-    (struct $name:ident, $type:expr) => {
+    (struct $name:ident as $type:expr) => {
         #[derive(__cpp_internal_class)]
         #[repr(C)]
         struct $name {
-            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(struct $name, $type), 0).1]
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(struct $name as $type), 0).1]
         }
     };
-    (pub struct $name:ident, $type:expr) => {
+    (pub struct $name:ident as $type:expr) => {
         #[derive(__cpp_internal_class)]
         #[repr(C)]
         pub struct $name {
-            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(pub struct $name, $type), 0).1]
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(pub struct $name as $type), 0).1]
         }
     };
 }
