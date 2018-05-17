@@ -200,7 +200,7 @@ pub mod parsing {
             is_pub: option!(keyword!("pub")) >>
             keyword!("struct") >>
             name: ident >>
-            punct!(",") >>
+            keyword!("as") >>
             cpp_type: string >>
             (Class {
                 name: name,
