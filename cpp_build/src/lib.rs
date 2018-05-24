@@ -250,6 +250,7 @@ Failed to create output object directory."#,
 /// `cc::Build` object.
 pub struct Config {
     cc: cc::Build,
+    std_flag_set: bool, // true if the -std flag was specified
 }
 
 impl Config {
@@ -259,7 +260,7 @@ impl Config {
     pub fn new() -> Config {
         let mut cc = cc::Build::new();
         cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
-        Config { cc: cc }
+        Config { cc: cc, std_flag_set: false }
     }
 
     /// Add a directory to the `-I` or include path for headers
@@ -283,12 +284,18 @@ impl Config {
 
     /// Add an arbitrary flag to the invocation of the compiler
     pub fn flag(&mut self, flag: &str) -> &mut Self {
+        if flag.starts_with("-std=") {
+            self.std_flag_set = true;
+        }
         self.cc.flag(flag);
         self
     }
 
     /// Add an arbitrary flag to the invocation of the compiler if it supports it
     pub fn flag_if_supported(&mut self, flag: &str) -> &mut Self {
+        if flag.starts_with("-std=") {
+            self.std_flag_set = true;
+        }
         self.cc.flag_if_supported(flag);
         self
     }
@@ -489,6 +496,16 @@ In order to provide a better error message, the build script will exit successfu
 
         // Generate the C++ library code
         let filename = gen_cpp_lib(&visitor);
+
+        // Ensure C++11 mode is enabled. We rely on some C++11 construct, so we
+        // must enable C++11 by default.
+        // MSVC, GCC >= 5, Clang >= 6 defaults to C++14, but since we want to
+        // supports older compiler which defaults to C++98, we need to
+        // explicitly set the "-std" flag.
+        // Ideally should be done by https://github.com/alexcrichton/cc-rs/issues/191
+        if !self.std_flag_set {
+            self.cc.flag_if_supported("-std=c++11");
+        }
 
         // Build the C++ library
         self.cc.file(filename).compile(LIB_NAME);

@@ -30,7 +30,7 @@ fn captures() {
     let z = unsafe {
         cpp! {[x as "int", mut y as "int"] -> i64 as "long long int" {
             y += 1;
-            return x + y;
+            return [&] { return x + y; }();
         }}
     };
     assert_eq!(x, 10);
