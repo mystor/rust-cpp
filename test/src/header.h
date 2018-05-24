@@ -45,7 +45,7 @@ struct B {
 
 struct MoveOnly {
     MoveOnly(int a = 8, int b = 9) : data(a,b) { }
-#if __cplusplus > 199711L
+#if !defined (_MSC_VER) || (_MSC_VER + 0 >= 1900)
     MoveOnly(const MoveOnly &) = delete ;
     MoveOnly& operator=(const MoveOnly &) = delete ;
     MoveOnly(MoveOnly &&other) : data(other.data) { }
