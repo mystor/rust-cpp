@@ -45,50 +45,20 @@ const INTERNAL_CPP_STRUCTS: &'static str = r#"
 #include "stdint.h" // For {u}intN_t
 #include <new> // For placement new
 #include <cstdlib> // For abort
-
-#if __cplusplus <= 199711L && !defined(_MSC_VER)
-namespace rustcpp {
-template<typename T>
-struct is_default_constructible {
-    template<typename X>
-    static double test(int(*)[sizeof(new X)]);
-    template<typename X>
-    static char test(...);
-    enum { value = sizeof(test<T>(0)) == sizeof(double) };
-};
-template<typename T>
-struct is_copy_constructible {
-    static T &declval();
-    template<typename X>
-    static double test(int(*)[sizeof(new X(declval()))]);
-    template<typename X>
-    static char test(...);
-    enum { value = sizeof(test<T>(0)) == sizeof(double) };
-};
-template<bool B, class T = void> struct enable_if {};
-template<class T> struct enable_if<true, T> { typedef T type; };
-}
-#else
 #include <type_traits>
-namespace rustcpp {
-using std::is_default_constructible;
-using std::is_copy_constructible;
-using std::enable_if;
-}
-#endif
 
 namespace rustcpp {
 template<typename T>
-typename enable_if<is_copy_constructible<T>::value>::type copy_helper(const void *src, void *dest)
+typename std::enable_if<std::is_copy_constructible<T>::value>::type copy_helper(const void *src, void *dest)
 { new (dest) T (*static_cast<T const*>(src)); }
 template<typename T>
-typename enable_if<!is_copy_constructible<T>::value>::type copy_helper(const void *, void *)
+typename std::enable_if<!std::is_copy_constructible<T>::value>::type copy_helper(const void *, void *)
 { std::abort(); }
 template<typename T>
-typename enable_if<is_default_constructible<T>::value>::type default_helper(void *dest)
+typename std::enable_if<std::is_default_constructible<T>::value>::type default_helper(void *dest)
 { new (dest) T(); }
 template<typename T>
-typename enable_if<!is_default_constructible<T>::value>::type default_helper(void *)
+typename std::enable_if<!std::is_default_constructible<T>::value>::type default_helper(void *)
 { std::abort(); }
 }
 
@@ -265,16 +235,15 @@ struct AlignOf {{
 template<typename T>
 struct Flags {{
     static const uintptr_t value =
-        (is_copy_constructible<T>::value << {flag_is_copy_constructible}) |
-        (is_default_constructible<T>::value << {flag_is_default_constructible}) |
-#if __cplusplus > 199711L
+        (std::is_copy_constructible<T>::value << {flag_is_copy_constructible}) |
+        (std::is_default_constructible<T>::value << {flag_is_default_constructible}) |
+#if !defined(__GNUC__) || (__GNUC__ + 0 >= 5) || defined(__clang__)
         (std::is_trivially_destructible<T>::value << {flag_is_trivially_destructible}) |
         (std::is_trivially_copyable<T>::value << {flag_is_trivially_copyable}) |
         (std::is_trivially_default_constructible<T>::value << {flag_is_trivially_default_constructible}) |
 #endif
         0;
 }};
-
 
 struct SizeAlign {{
     uint64_t hash;
