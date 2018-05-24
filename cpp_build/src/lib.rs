@@ -12,7 +12,7 @@ extern crate cpp_syn as syn;
 
 extern crate cpp_synmap;
 
-extern crate gcc;
+extern crate cc;
 
 #[macro_use]
 extern crate lazy_static;
@@ -245,11 +245,11 @@ Failed to create output object directory."#,
 ///
 /// ## API Note
 ///
-/// Internally, `cpp` uses `gcc-rs` to build the compilation artifact, and many
-/// of the methods defined on this type directly proxy to an internal
-/// `gcc::Build` object.
+/// Internally, `cpp` uses the `cc` crate to build the compilation artifact,
+/// and many of the methods defined on this type directly proxy to an internal
+/// `cc::Build` object.
 pub struct Config {
-    gcc: gcc::Build,
+    cc: cc::Build,
 }
 
 impl Config {
@@ -257,41 +257,40 @@ impl Config {
     /// options which control the build. If you don't need to make any changes,
     /// `cpp_build::build` is a wrapper function around this interface.
     pub fn new() -> Config {
-        let mut gcc = gcc::Build::new();
-        gcc.cpp(true);
-        gcc.include(&*CARGO_MANIFEST_DIR);
-        Config { gcc: gcc }
+        let mut cc = cc::Build::new();
+        cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
+        Config { cc: cc }
     }
 
     /// Add a directory to the `-I` or include path for headers
     pub fn include<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
-        self.gcc.include(dir);
+        self.cc.include(dir);
         self
     }
 
     /// Specify a `-D` variable with an optional value
     pub fn define(&mut self, var: &str, val: Option<&str>) -> &mut Self {
-        self.gcc.define(var, val);
+        self.cc.define(var, val);
         self
     }
 
     // XXX: Make sure that this works with sizes logic
     /// Add an arbitrary object file to link in
     pub fn object<P: AsRef<Path>>(&mut self, obj: P) -> &mut Self {
-        self.gcc.object(obj);
+        self.cc.object(obj);
         self
     }
 
     /// Add an arbitrary flag to the invocation of the compiler
     pub fn flag(&mut self, flag: &str) -> &mut Self {
-        self.gcc.flag(flag);
+        self.cc.flag(flag);
         self
     }
 
     // XXX: Make sure this works with sizes logic
     /// Add a file which will be compiled
     pub fn file<P: AsRef<Path>>(&mut self, p: P) -> &mut Self {
-        self.gcc.file(p);
+        self.cc.file(p);
         self
     }
 
@@ -307,7 +306,7 @@ impl Config {
     ///
     /// The given library name must not contain the `lib` prefix.
     pub fn cpp_link_stdlib(&mut self, cpp_link_stdlib: Option<&str>) -> &mut Self {
-        self.gcc.cpp_link_stdlib(cpp_link_stdlib);
+        self.cc.cpp_link_stdlib(cpp_link_stdlib);
         self
     }
 
@@ -332,7 +331,7 @@ impl Config {
     ///
     /// The given library name must not contain the `lib` prefix.
     pub fn cpp_set_stdlib(&mut self, cpp_set_stdlib: Option<&str>) -> &mut Self {
-        self.gcc.cpp_set_stdlib(cpp_set_stdlib);
+        self.cc.cpp_set_stdlib(cpp_set_stdlib);
         self
     }
 
@@ -343,7 +342,7 @@ impl Config {
     // /// This option is automatically scraped from the `TARGET` environment
     // /// variable by build scripts, so it's not required to call this function.
     // pub fn target(&mut self, target: &str) -> &mut Self {
-    //     self.gcc.target(target);
+    //     self.cc.target(target);
     //     self
     // }
 
@@ -352,7 +351,7 @@ impl Config {
     /// This option is automatically scraped from the `HOST` environment
     /// variable by build scripts, so it's not required to call this function.
     pub fn host(&mut self, host: &str) -> &mut Self {
-        self.gcc.host(host);
+        self.cc.host(host);
         self
     }
 
@@ -361,7 +360,7 @@ impl Config {
     /// This option is automatically scraped from the `OPT_LEVEL` environment
     /// variable by build scripts, so it's not required to call this function.
     pub fn opt_level(&mut self, opt_level: u32) -> &mut Self {
-        self.gcc.opt_level(opt_level);
+        self.cc.opt_level(opt_level);
         self
     }
 
@@ -370,7 +369,7 @@ impl Config {
     /// This option is automatically scraped from the `OPT_LEVEL` environment
     /// variable by build scripts, so it's not required to call this function.
     pub fn opt_level_str(&mut self, opt_level: &str) -> &mut Self {
-        self.gcc.opt_level_str(opt_level);
+        self.cc.opt_level_str(opt_level);
         self
     }
 
@@ -381,7 +380,7 @@ impl Config {
     /// variable by build scripts (only enabled when the profile is "debug"), so
     /// it's not required to call this function.
     pub fn debug(&mut self, debug: bool) -> &mut Self {
-        self.gcc.debug(debug);
+        self.cc.debug(debug);
         self
     }
 
@@ -393,7 +392,7 @@ impl Config {
     // /// This option is automatically scraped from the `OUT_DIR` environment
     // /// variable by build scripts, so it's not required to call this function.
     // pub fn out_dir<P: AsRef<Path>>(&mut self, out_dir: P) -> &mut Self {
-    //     self.gcc.out_dir(out_dir);
+    //     self.cc.out_dir(out_dir);
     //     self
     // }
 
@@ -403,7 +402,7 @@ impl Config {
     /// number of environment variables, so it's not required to call this
     /// function.
     pub fn compiler<P: AsRef<Path>>(&mut self, compiler: P) -> &mut Self {
-        self.gcc.compiler(compiler);
+        self.cc.compiler(compiler);
         self
     }
 
@@ -413,7 +412,7 @@ impl Config {
     /// number of environment variables, so it's not required to call this
     /// function.
     pub fn archiver<P: AsRef<Path>>(&mut self, archiver: P) -> &mut Self {
-        self.gcc.archiver(archiver);
+        self.cc.archiver(archiver);
         self
     }
 
@@ -421,7 +420,7 @@ impl Config {
     /// automatically link the binary. Defaults to `true`.
     pub fn cargo_metadata(&mut self, cargo_metadata: bool) -> &mut Self {
         // XXX: Use this to control the cargo metadata which rust-cpp produces
-        self.gcc.cargo_metadata(cargo_metadata);
+        self.cc.cargo_metadata(cargo_metadata);
         self
     }
 
@@ -430,7 +429,7 @@ impl Config {
     /// This option defaults to `false` for `i686` and `windows-gnu` targets and
     /// to `true` for all other targets.
     pub fn pic(&mut self, pic: bool) -> &mut Self {
-        self.gcc.pic(pic);
+        self.cc.pic(pic);
         self
     }
 
@@ -485,8 +484,8 @@ In order to provide a better error message, the build script will exit successfu
         // Generate the C++ library code
         let filename = gen_cpp_lib(&visitor);
 
-        // Build the C++ library using gcc-rs
-        self.gcc.file(filename).compile(LIB_NAME);
+        // Build the C++ library
+        self.cc.file(filename).compile(LIB_NAME);
     }
 }
 
