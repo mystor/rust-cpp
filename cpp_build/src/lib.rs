@@ -287,6 +287,12 @@ impl Config {
         self
     }
 
+    /// Add an arbitrary flag to the invocation of the compiler if it supports it
+    pub fn flag_if_supported(&mut self, flag: &str) -> &mut Self {
+        self.cc.flag_if_supported(flag);
+        self
+    }
+
     // XXX: Make sure this works with sizes logic
     /// Add a file which will be compiled
     pub fn file<P: AsRef<Path>>(&mut self, p: P) -> &mut Self {
