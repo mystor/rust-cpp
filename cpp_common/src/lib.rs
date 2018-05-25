@@ -79,18 +79,20 @@ pub struct Closure {
     pub body: Spanned<String>,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Class {
     pub name: Ident,
     pub cpp: String,
     pub public: bool,
+    pub line: String, // the #line directive
 }
 
 impl Class {
     pub fn name_hash(&self) -> u64 {
-        // XXX: Use a better hasher than the default?
         let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
+        self.name.hash(&mut hasher);
+        self.cpp.hash(&mut hasher);
+        self.public.hash(&mut hasher);
         hasher.finish()
     }
 }
@@ -206,6 +208,7 @@ pub mod parsing {
                 name: name,
                 cpp: cpp_type.value,
                 public: is_pub.is_some(),
+                line: String::default(),
             })));
 
     named!(pub class_macro -> Class , mac_body!(cpp_class));
