@@ -92,6 +92,12 @@ typename enable_if<!is_default_constructible<T>::value>::type default_helper(voi
 { std::abort(); }
 }
 
+#define RUST_CPP_CLASS_HELPER(HASH, ...) \
+    extern "C" { \
+    void __cpp_destructor_##HASH(void *ptr) { typedef __VA_ARGS__ T; static_cast<T*>(ptr)->~T(); } \
+    void __cpp_copy_##HASH(const void *src, void *dest) { rustcpp::copy_helper<__VA_ARGS__>(src, dest); } \
+    void __cpp_default_##HASH(void *dest) { rustcpp::default_helper<__VA_ARGS__>(dest); } \
+    }
 "#;
 
 lazy_static! {
@@ -227,25 +233,12 @@ void {name}({params}{comma} void* __result) {{
                 rustcpp::Flags<{type}>::value
             }}", hash=hash, type=class.cpp));
 
-        // Generate constructor
+        // Generate helper function.
+        // (this is done in a macro, which right after a #line directing pointing to the location of
+        // the cpp_class! macro in order to give right line information in the possible errors)
         write!(
-            output,
-            r#"
-extern "C" {{
-void __cpp_destructor_{hash}(void *ptr) {{
-    typedef {cpp_name} T;
-    static_cast<T*>(ptr)->~T();
-}}
-void __cpp_copy_{hash}(const void *src, void *dest) {{
-    rustcpp::copy_helper<{cpp_name}>(src, dest);
-}}
-void __cpp_default_{hash}(void *dest) {{
-    rustcpp::default_helper<{cpp_name}>(dest);
-}}
-}}
-"#,
-            hash = hash,
-            cpp_name = class.cpp
+            output, "{line}RUST_CPP_CLASS_HELPER({hash}, {cpp_name})\n",
+            line = class.line, hash = hash, cpp_name = class.cpp
         ).unwrap();
     }
 
@@ -628,17 +621,21 @@ struct Handle<'a> {
     sm: &'a SourceMap,
 }
 
+fn line_directive(span: syn::Span, sm: &SourceMap) -> String {
+        let loc = sm.locinfo(span).unwrap();
+        let mut line = format!("#line {} {:?}\n", loc.line, loc.path);
+        for _ in 0..loc.col {
+            line.push(' ');
+        }
+        return line;
+}
+
 fn extract_with_span(spanned: &mut Spanned<String>, src: &str, offset: usize, sm: &SourceMap) {
     if spanned.span != DUMMY_SPAN {
         let src_slice = &src[spanned.span.lo..spanned.span.hi];
         spanned.span.lo += offset;
         spanned.span.hi += offset;
-
-        let loc = sm.locinfo(spanned.span).unwrap();
-        spanned.node = format!("#line {} {:?}\n", loc.line, loc.path);
-        for _ in 0..loc.col {
-            spanned.node.push(' ');
-        }
+        spanned.node = line_directive(spanned.span, sm);
         spanned.node.push_str(src_slice);
     }
 }
@@ -678,7 +675,8 @@ impl<'a> Visitor for Handle<'a> {
             };
             let src = self.sm.source_text(span).unwrap();
             let input = synom::ParseState::new(&src);
-            let class = parsing::class_macro(input).expect("cpp_class! macro");
+            let mut class = parsing::class_macro(input).expect("cpp_class! macro");
+            class.line = line_directive(span, self.sm);
             self.classes.push(class);
         }
     }
