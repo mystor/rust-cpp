@@ -101,6 +101,23 @@ typename std::enable_if<std::is_default_constructible<T>::value>::type default_h
 template<typename T>
 typename std::enable_if<!std::is_default_constructible<T>::value>::type default_helper(void *)
 { std::abort(); }
+
+template<typename T> int compare_helper(const T &a, const T&b, int cmp) {
+    switch (cmp) {
+        using namespace std::rel_ops;
+        case 0:
+            if (a < b)
+                return -1;
+            if (b < a)
+                return 1;
+            return 0;
+        case -2: return a < b;
+        case 2: return a > b;
+        case -1: return a <= b;
+        case 1: return a >= b;
+    }
+    std::abort();
+}
 }
 
 #define RUST_CPP_CLASS_HELPER(HASH, ...) \
@@ -339,9 +356,23 @@ void {name}({params}{comma} void* __result) {{
         // (this is done in a macro, which right after a #line directing pointing to the location of
         // the cpp_class! macro in order to give right line information in the possible errors)
         write!(
-            output, "{line}RUST_CPP_CLASS_HELPER({hash}, {cpp_name})\n",
-            line = class.line, hash = hash, cpp_name = class.cpp
+            output,
+            "{line}RUST_CPP_CLASS_HELPER({hash}, {cpp_name})\n",
+            line = class.line,
+            hash = hash,
+            cpp_name = class.cpp
         ).unwrap();
+
+        if class.derives("PartialEq") {
+            write!(output,
+                "{line}extern \"C\" bool __cpp_equal_{hash}(const {name} *a, const {name} *b) {{ return *a == *b; }}\n",
+                line = class.line, hash = hash, name = class.cpp).unwrap();
+        }
+        if class.derives("PartialOrd") {
+            write!(output,
+                "{line}extern \"C\" bool __cpp_compare_{hash}(const {name} *a, const {name} *b, int cmp) {{ return rustcpp::compare_helper(*a, *b, cmp); }}\n",
+                line = class.line, hash = hash, name = class.cpp).unwrap();
+        }
     }
 
     let mut magic = vec![];

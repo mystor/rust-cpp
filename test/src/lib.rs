@@ -255,6 +255,64 @@ fn move_only() {
 }
 
 #[test]
+fn derive_eq() {
+    cpp!{{
+        struct WithOpEq {
+            static int val;
+            int value = val++;
+            friend bool operator==(const WithOpEq &a, const WithOpEq &b) { return a.value == b.value; }
+        };
+        int WithOpEq::val = 0;
+    }};
+    cpp_class!(#[derive(Eq, PartialEq)] unsafe struct WithOpEq as "WithOpEq");
+
+    let x1 = WithOpEq::default();
+    let x2 = WithOpEq::default();
+
+    assert!(!(x1 == x2));
+    assert!(x1 != x2);
+
+    let x3 = x1.clone();
+    assert!(x1 == x3);
+    assert!(!(x1 != x3));
+}
+
+#[test]
+fn derive_ord() {
+    cpp!{{
+        struct Comp {
+            int value;
+            Comp(int i) : value(i) { }
+            friend bool operator<(const Comp &a, const Comp &b) { return a.value < b.value; }
+            friend bool operator==(const Comp &a, const Comp &b) { return a.value == b.value; }
+        };
+    }};
+    cpp_class!(#[derive(PartialEq, PartialOrd)] #[derive(Eq, Ord)] unsafe struct Comp as "Comp");
+    impl Comp {
+        fn new(i : u32) -> Comp { unsafe { cpp!([i as "int"] -> Comp as "Comp" { return i; }) } }
+    }
+
+    let x1 = Comp::new(1);
+    let x2 = Comp::new(2);
+    let x3 = Comp::new(3);
+    assert!(x1 < x2);
+    assert!(x2 > x1);
+    assert!(x3 > x1);
+    assert!(x3 >= x1);
+    assert!(x3 >= x3);
+    assert!(x2 <= x3);
+    assert!(x2 <= x2);
+    assert!(!(x1 > x2));
+    assert!(!(x2 < x1));
+    assert!(!(x3 <= x1));
+    assert!(!(x1 < x1));
+    assert!(!(x3 > x3));
+    assert!(!(x3 < x3));
+    assert!(!(x2 >= x3));
+}
+
+
+#[test]
 fn test_nomod() {
     assert_eq!(nomod::inner::nomod_inner(), 10);
 }

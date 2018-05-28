@@ -10,7 +10,7 @@ extern crate quote;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use syn::{Ident, Spanned, Ty};
+use syn::{Ident, MetaItem, Spanned, Ty};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -84,6 +84,7 @@ pub struct Class {
     pub name: Ident,
     pub cpp: String,
     pub public: bool,
+    pub attrs: Vec<MetaItem>,
     pub line: String, // the #line directive
 }
 
@@ -93,7 +94,24 @@ impl Class {
         self.name.hash(&mut hasher);
         self.cpp.hash(&mut hasher);
         self.public.hash(&mut hasher);
+        self.attrs.hash(&mut hasher);
         hasher.finish()
+    }
+
+    pub fn derives(&self, i: &str) -> bool {
+        self.attrs.iter().any(|x| {
+            if let MetaItem::List(ref n, ref list) = x {
+                n.as_ref() == "derive" && list.iter().any(|y| {
+                    if let syn::NestedMetaItem::MetaItem(MetaItem::Word(ref d)) = y {
+                        d.as_ref() == i
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            }
+        })
     }
 }
 
@@ -103,9 +121,9 @@ pub enum Macro {
 }
 
 pub mod parsing {
-    use syn::parse::{ident, string, tt, ty};
-    use syn::{Spanned, Ty, DUMMY_SPAN, Ident};
-    use super::{Capture, Closure, ClosureSig, Macro, Class};
+    use super::{Capture, Class, Closure, ClosureSig, Macro};
+    use syn::parse::{ident, lit, string, tt, ty};
+    use syn::{Ident, MetaItem, NestedMetaItem, Spanned, Ty, DUMMY_SPAN};
 
     macro_rules! mac_body {
         ($i: expr, $submac:ident!( $($args:tt)* )) => {
@@ -198,8 +216,43 @@ pub mod parsing {
             punct!("@"), keyword!("TYPE"), cpp_closure
         ), (|(_, _, x)| x))));
 
+    //FIXME: make cpp_syn::attr::parsing::outer_attr  public
+    // This is just a trimmed down version of it
+    named!(pub outer_attr -> MetaItem, do_parse!(
+        punct!("#") >>
+        punct!("[") >>
+        attr: meta_item >>
+        punct!("]") >>
+        (attr)
+    ));
+
+    named!(meta_item -> MetaItem, alt!(
+        do_parse!(
+            id: ident >>
+            punct!("(") >>
+            inner: terminated_list!(punct!(","), nested_meta_item) >>
+            punct!(")") >>
+            (MetaItem::List(id, inner))
+        )
+        |
+        do_parse!(
+            name: ident >>
+            punct!("=") >>
+            value: lit >>
+            (MetaItem::NameValue(name, value))
+        )
+        |
+        map!(ident, MetaItem::Word)
+    ));
+    named!(nested_meta_item -> NestedMetaItem, alt!(
+        meta_item => { NestedMetaItem::MetaItem }
+        |
+        lit => { NestedMetaItem::Literal }
+    ));
+
     named!(pub cpp_class -> Class,
            do_parse!(
+            attrs: many0!(outer_attr) >>
             is_pub: option!(keyword!("pub")) >>
             keyword!("unsafe") >>
             keyword!("struct") >>
@@ -210,6 +263,7 @@ pub mod parsing {
                 name: name,
                 cpp: cpp_type.value,
                 public: is_pub.is_some(),
+                attrs: attrs,
                 line: String::default(),
             })));
 
