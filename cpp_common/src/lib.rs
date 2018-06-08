@@ -200,6 +200,7 @@ pub mod parsing {
     named!(pub cpp_class -> Class,
            do_parse!(
             is_pub: option!(keyword!("pub")) >>
+            keyword!("unsafe") >>
             keyword!("struct") >>
             name: ident >>
             keyword!("as") >>
