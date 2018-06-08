@@ -128,7 +128,7 @@ pub trait CppTrait {
 /// Most C++ types that do not contain self-references or
 ///
 /// ```ignore
-/// cpp_class!(pub struct MyClass as "MyClass");
+/// cpp_class!(pub unsafe struct MyClass as "MyClass");
 /// impl MyClass {
 ///     fn new() -> Self {
 ///         unsafe { cpp!([] -> MyClass as "MyClass" { return MyClass(); }) }
@@ -149,18 +149,20 @@ pub trait CppTrait {
 ///
 #[macro_export]
 macro_rules! cpp_class {
-    (struct $name:ident as $type:expr) => {
+    (unsafe struct $name:ident as $type:expr) => {
         #[derive(__cpp_internal_class)]
         #[repr(C)]
         struct $name {
-            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(struct $name as $type), 0).1]
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE
+                + (stringify!(unsafe struct $name as $type), 0).1]
         }
     };
-    (pub struct $name:ident as $type:expr) => {
+    (pub unsafe struct $name:ident as $type:expr) => {
         #[derive(__cpp_internal_class)]
         #[repr(C)]
         pub struct $name {
-            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE + (stringify!(pub struct $name as $type), 0).1]
+            _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE
+                + (stringify!(pub unsafe struct $name as $type), 0).1]
         }
     };
 }

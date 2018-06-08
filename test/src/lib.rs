@@ -20,7 +20,7 @@ cpp!{{
     #include <iostream>
 }}
 
-cpp_class!(struct A as "A");
+cpp_class!(unsafe struct A as "A");
 impl A {
     fn new(a : i32, b: i32) -> Self {
         unsafe {
@@ -136,7 +136,7 @@ fn member_function() {
     assert_eq!(a.multiply(), 5*6);
 }
 
-cpp_class!(struct B as "B");
+cpp_class!(unsafe struct B as "B");
 impl B {
     fn new(a : i32, b: i32) -> Self {
         unsafe {
@@ -179,7 +179,7 @@ fn simple_class() {
 
 #[test]
 fn move_only() {
-    cpp_class!(struct MoveOnly as "MoveOnly");
+    cpp_class!(unsafe struct MoveOnly as "MoveOnly");
     impl MoveOnly {
         fn data(&self) -> &A {
             unsafe {
