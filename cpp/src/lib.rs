@@ -1,66 +1,4 @@
-//! This crate `cpp` only provides a single macro, the `cpp!` macro. This macro
-//! by itself is not useful, but when combined with the `cpp_build` crate it
-//! allows embedding arbitrary C++ code.
-//!
-//! There are two variants of the `cpp!` macro. The first variant is used for
-//! raw text inclusion. Text is included into the generated `C++` file in the
-//! order which they were defined, inlining module declarations.
-//!
-//! ```ignore
-//! cpp! {{
-//!     #include <stdint.h>
-//!     #include <stdio.h>
-//! }}
-//! ```
-//!
-//! The second variant is used to embed C++ code within rust code. A list of
-//! variable names which should be captured are taken as the first argument,
-//! with their corresponding C++ type. The body is compiled as a C++ function.
-//!
-//! This variant of the macro may only be invoked in expression context, and
-//! requires an `unsafe` block, as it is performing FFI.
-//!
-//! ```ignore
-//! let y: i32 = 10;
-//! let mut z: i32 = 20;
-//! let x: i32 = cpp!([y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
-//!     z++;
-//!     return y + z;
-//! });
-//! ```
-//!
-//! ## rust! pseudo-macro
-//!
-//! The first variant of the cpp! macro can contain, in the C++ code, a rust! sub-
-//! macro, which allows to include rust code in C++ code. This is useful to
-//! implement callback or override virtual functions. Example:
-//!
-//! ```ignore
-//! trait MyTrait {
-//!    fn compute_value(&self, x : i32) -> i32;
-//! }
-//!
-//! cpp!{{
-//!    struct TraitPtr { void *a,*b; };
-//!    class MyClassImpl : public MyClass {
-//!      public:
-//!        TraitPtr m_trait;
-//!        int computeValue(int x) const override {
-//!            return rust!(MCI_computeValue [m_trait : &MyTrait as "TraitPtr", x : i32 as "int"]
-//!                -> i32 as "int" {
-//!                m_trait.compute_value(x)
-//!            });
-//!        }
-//!    }
-//! }}
-//! ```
-//!
-//! The syntax for the rust! macro is:
-//! ```ignore
-//! rust!($uniq_ident:ident [$($arg_name:ident : $arg_rust_type:ty as $arg_c_type:tt),*]
-//!      $(-> $ret_rust_type:ty as $rust_c_type:tt)* {$($body:tt)*})
-//! ```
-//! uniq_ident is an unique identifier which will be used to name the extern function
+//! This crate `cpp` provides macros that allow embedding arbitrary C++ code.
 //!
 //! # Usage
 //!
@@ -175,8 +113,67 @@ macro_rules! __cpp_internal {
     };
 }
 
-/// This macro is used to embed arbitrary C++ code. See the module level
-/// documentation for more details.
+/// This macro is used to embed arbitrary C++ code.
+///
+/// There are two variants of the `cpp!` macro. The first variant is used for
+/// raw text inclusion. Text is included into the generated `C++` file in the
+/// order which they were defined, inlining module declarations.
+///
+/// ```ignore
+/// cpp! {{
+///     #include <stdint.h>
+///     #include <stdio.h>
+/// }}
+/// ```
+///
+/// The second variant is used to embed C++ code within rust code. A list of
+/// variable names which should be captured are taken as the first argument,
+/// with their corresponding C++ type. The body is compiled as a C++ function.
+///
+/// This variant of the macro may only be invoked in expression context, and
+/// requires an `unsafe` block, as it is performing FFI.
+///
+/// ```ignore
+/// let y: i32 = 10;
+/// let mut z: i32 = 20;
+/// let x: i32 = cpp!([y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
+///     z++;
+///     return y + z;
+/// });
+/// ```
+///
+/// ## rust! pseudo-macro
+///
+/// The first variant of the cpp! macro can contain, in the C++ code, a rust! sub-
+/// macro, which allows to include rust code in C++ code. This is useful to
+/// implement callback or override virtual functions. Example:
+///
+/// ```ignore
+/// trait MyTrait {
+///    fn compute_value(&self, x : i32) -> i32;
+/// }
+///
+/// cpp!{{
+///    struct TraitPtr { void *a,*b; };
+///    class MyClassImpl : public MyClass {
+///      public:
+///        TraitPtr m_trait;
+///        int computeValue(int x) const override {
+///            return rust!(MCI_computeValue [m_trait : &MyTrait as "TraitPtr", x : i32 as "int"]
+///                -> i32 as "int" {
+///                m_trait.compute_value(x)
+///            });
+///        }
+///    }
+/// }}
+/// ```
+///
+/// The syntax for the rust! macro is:
+/// ```ignore
+/// rust!($uniq_ident:ident [$($arg_name:ident : $arg_rust_type:ty as $arg_c_type:tt),*]
+///      $(-> $ret_rust_type:ty as $rust_c_type:tt)* {$($body:tt)*})
+/// ```
+/// uniq_ident is an unique identifier which will be used to name the extern function
 #[macro_export]
 macro_rules! cpp {
     // raw text inclusion
@@ -231,6 +228,11 @@ pub trait CppTrait {
 /// calling the destructor, the Clone trait calling the copy constructor, if the
 /// class is copyable (or Copy if it is trivially copyable), and Default if the class
 /// is default constructible
+///
+/// The presence of the unsafe keyword in the macro is required as this macro is
+/// calling potentially unsafe. The C++ constructors and destructor might be called
+/// when the class is created/cloned/destructed. You must ensure that the C++ class
+/// can be safely moved in memory.
 ///
 #[macro_export]
 macro_rules! cpp_class {
