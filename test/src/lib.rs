@@ -330,3 +330,10 @@ fn rust_submacro_trait() {
     })};
     assert_eq!(i, 123 + 333);
 }
+
+#[test]
+fn witin_macro() {
+    assert_eq!(unsafe { cpp!([] -> u32 as "int" { return 12; }) }, 12);
+    let s = format!("hello{}", unsafe { cpp!([] -> u32 as "int" { return 14; }) } );
+    assert_eq!(s, "hello14");
+}
