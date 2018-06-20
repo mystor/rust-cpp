@@ -22,10 +22,10 @@
 //! build = "build.rs"
 //!
 //! [dependencies]
-//! cpp = "0.3"
+//! cpp = "0.4"
 //!
 //! [build-dependencies]
-//! cpp_build = "0.3"
+//! cpp_build = "0.4"
 //! ```
 //!
 //! #### build.rs
