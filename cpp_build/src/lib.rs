@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use syn::visit::Visitor;
-use syn::{Mac, Span, Spanned, DUMMY_SPAN};
+use syn::{Mac, Spanned, DUMMY_SPAN, Ident, Token, TokenTree};
 use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, Class, LIB_NAME, STRUCT_METADATA_MAGIC,
                  VERSION, flags};
 use cpp_synmap::SourceMap;
@@ -745,40 +745,77 @@ impl<'a> Visitor for Handle<'a> {
             return;
         }
         if mac.path.segments[0].ident.as_ref() == "cpp" {
-            let tts = &mac.tts;
-            assert!(tts.len() >= 1);
-            let span = Span {
-                lo: tts[0].span().lo,
-                hi: tts[tts.len() - 1].span().hi,
-            };
-            let src = self.sm.source_text(span).unwrap();
-            let input = synom::ParseState::new(&src);
-            match parsing::build_macro(input).expect(&format!("cpp! macro at {}", self.sm.locinfo(span).unwrap())) {
-                Macro::Closure(mut c) => {
-                    extract_with_span(&mut c.body, &src, span.lo, self.sm);
-                    self.closures.push(c);
-                }
-                Macro::Lit(mut l) => {
-                    extract_with_span(&mut l, &src, span.lo, self.sm);
-                    self.snippets.push('\n');
-                    let (snip, extern_decl) = expand_sub_rust_macro(l.node.clone());
-                    self.snippets.push_str(&extern_decl);
-                    self.snippets.push_str(&snip);
-                }
+            assert!(mac.tts.len() == 1);
+            self.handle_cpp(&mac.tts[0]);
+        } else if mac.path.segments[0].ident.as_ref() == "cpp_class" {
+            assert!(mac.tts.len() == 1);
+            self.handle_cpp_class(&mac.tts[0]);
+        } else {
+            self.parse_macro(&mac.tts);
+        }
+    }
+}
+
+impl<'a> Handle<'a> {
+    fn handle_cpp(&mut self, tt: &TokenTree) {
+        let span = tt.span();
+        let src = self.sm.source_text(span).unwrap();
+        let input = synom::ParseState::new(&src);
+        match parsing::build_macro(input)
+            .expect(&format!("cpp! macro at {}", self.sm.locinfo(span).unwrap()))
+        {
+            Macro::Closure(mut c) => {
+                extract_with_span(&mut c.body, &src, span.lo, self.sm);
+                self.closures.push(c);
+            }
+            Macro::Lit(mut l) => {
+                extract_with_span(&mut l, &src, span.lo, self.sm);
+                self.snippets.push('\n');
+                let (snip, extern_decl) = expand_sub_rust_macro(l.node.clone());
+                self.snippets.push_str(&extern_decl);
+                self.snippets.push_str(&snip);
             }
         }
-        if mac.path.segments[0].ident.as_ref() == "cpp_class" {
-            let tts = &mac.tts;
-            assert!(tts.len() >= 1);
-            let span = Span {
-                lo: tts[0].span().lo,
-                hi: tts[tts.len() - 1].span().hi,
-            };
-            let src = self.sm.source_text(span).unwrap();
-            let input = synom::ParseState::new(&src);
-            let mut class = parsing::class_macro(input).expect(&format!("cpp_class! macro at {}", self.sm.locinfo(span).unwrap()));
-            class.line = line_directive(span, self.sm);
-            self.classes.push(class);
+    }
+
+    fn handle_cpp_class(&mut self, tt: &TokenTree) {
+        let span = tt.span();
+        let src = self.sm.source_text(span).unwrap();
+        let input = synom::ParseState::new(&src);
+        let mut class = parsing::class_macro(input).expect(&format!(
+            "cpp_class! macro at {}",
+            self.sm.locinfo(span).unwrap()
+        ));
+        class.line = line_directive(span, self.sm);
+        self.classes.push(class);
+    }
+
+    fn parse_macro(&mut self, tts: &Vec<TokenTree>) {
+        let mut last_ident: Option<&Ident> = None;
+        let mut is_macro = false;
+        for t in tts {
+            match t {
+                TokenTree::Token(Token::Not, _) => is_macro = true,
+                TokenTree::Token(Token::Ident(ref i), _) => {
+                    is_macro = false;
+                    last_ident = Some(&i);
+                }
+                TokenTree::Delimited(ref d, _) => {
+                    if is_macro && last_ident.map_or(false, |i| i.as_ref() == "cpp") {
+                        self.handle_cpp(&t)
+                    } else if is_macro && last_ident.map_or(false, |i| i.as_ref() == "cpp_class") {
+                        self.handle_cpp_class(&t)
+                    } else {
+                        self.parse_macro(&d.tts)
+                    }
+                    is_macro = false;
+                    last_ident = None;
+                }
+                _ => {
+                    is_macro = false;
+                    last_ident = None;
+                }
+            }
         }
     }
 }
