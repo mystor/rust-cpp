@@ -11,7 +11,7 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp_build"
 
 [dependencies]
-lazy_static = "0.2.2"
+lazy_static = "1.0"
 cc = "1.0"
 cpp_common = { path = "../cpp_common", version = "=0.3.2" }
 cpp_synmap = { path = "../cpp_synmap", version = "0.3.0" }

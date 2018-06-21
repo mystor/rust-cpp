@@ -11,6 +11,6 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp_synmap"
 
 [dependencies]
-memchr = "1.0"
+memchr = "2.0"
 cpp_syn = { version = "0.12", features = ["full", "fold"] }
 cpp_synom = { version = "0.12" }
