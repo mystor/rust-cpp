@@ -101,6 +101,7 @@ cpp!{{
         // with a class
         A a(3,4);
         rust!(xx___10 [a : A as "A"] { let a2 = a.clone(); assert!(a2.multiply() == 12); } );
+        rust!(xx___11 [a : A as "A"] { let _a = a.clone(); return; } );
         return 0;
     }
 }}
