@@ -149,10 +149,10 @@ NOTE: rust-cpp's build function must be run in a build script."#));
 // Given a string containing some C++ code with a rust! macro,
 // this functions expand the rust! macro to a call to an extern
 // function, and return a tuple with the expanded C++ code, and
-// a declaration of the extern "C" function.
-fn expand_sub_rust_macro(input : String) -> (String, String) {
+// a list of all the names.
+fn expand_sub_rust_macro(input : String) -> (String, Vec<String>) {
     let mut result = input;
-    let mut extern_decl = String::new();
+    let mut names = Vec::new();
 
     use syn::parse::{ident, string, tt, ty};
     use synom::IResult::Done;
@@ -162,7 +162,7 @@ fn expand_sub_rust_macro(input : String) -> (String, String) {
         end: usize,
         id: String,
         return_type: Option<String>,
-        arguments: Vec<(String, String)>, // Vec of type and name pair
+        arguments: Vec<(String, String)>, // Vec of name and type
     };
 
     named!(rust_macro_argument -> (String, String),
@@ -197,30 +197,23 @@ fn expand_sub_rust_macro(input : String) -> (String, String) {
     loop {
         let tmp = result.clone();
         if let Done(_,rust_invocation) = find_rust_macro(synom::ParseState::new(&tmp)) {
+            names.push(rust_invocation.id.clone());
 
-            let decl_types = rust_invocation.arguments.iter().map(|&(_, ref val)| {
+            let mut decl_types = rust_invocation.arguments.iter().map(|&(_, ref val)| {
                     format!("rustcpp::argument_helper<{}>::type", val)
-                }).collect::<Vec<_>>().join(", ");
-            let call_args = rust_invocation.arguments.iter().map(|&(ref val, _)| val.as_ref()).collect::<Vec<_>>().join(", ");
+                }).collect::<Vec<_>>();
+            let mut call_args = rust_invocation.arguments.iter().map(|&(ref val, _)| val.as_ref()).collect::<Vec<_>>();
 
             let fn_call = match rust_invocation.return_type {
                 None => {
-                    extern_decl.push_str(&format!("extern \"C\" void {id} ({types});\n",
-                        id = &rust_invocation.id, types = decl_types));
-                    format!("{id}({args})", id = rust_invocation.id, args = call_args)
+                    format!("reinterpret_cast<void (*)({types})>({id})({args})",
+                        id = rust_invocation.id, types = decl_types.join(", "), args = call_args.join(", "))
                 }
                 Some(rty) => {
-                    if decl_types.is_empty() {
-                        extern_decl.push_str(&format!(
-                            "extern \"C\" {rty} *{id} (rustcpp::return_helper<{rty}> = 0);\n",
-                            rty = rty,  id = rust_invocation.id));
-
-                    } else {
-                        extern_decl.push_str(&format!(
-                            "extern \"C\" {rty} *{id} ({types}, rustcpp::return_helper<{rty}> = 0);\n",
-                            rty = rty,  id = rust_invocation.id, types = decl_types));
-                    }
-                    format!("std::move(*{id}({args}))", id = rust_invocation.id, args = call_args)
+                    decl_types.push(format!("rustcpp::return_helper<{rty}>", rty = rty));
+                    call_args.push("0");
+                    format!("std::move(*reinterpret_cast<{rty}*(*)({types})>({id})({args}))",
+                        rty = rty, id = rust_invocation.id, types = decl_types.join(", "), args = call_args.join(", "))
                 }
             };
 
@@ -238,7 +231,7 @@ fn expand_sub_rust_macro(input : String) -> (String, String) {
         }
     }
 
-    return (result, extern_decl);
+    return (result, names);
 }
 
 fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
@@ -802,8 +795,10 @@ impl<'a> Handle<'a> {
             Macro::Lit(mut l) => {
                 extract_with_span(&mut l, &src, span.lo, self.sm);
                 self.snippets.push('\n');
-                let (snip, extern_decl) = expand_sub_rust_macro(l.node.clone());
-                self.snippets.push_str(&extern_decl);
+                let (snip, names) = expand_sub_rust_macro(l.node.clone());
+                for n in names {
+                    self.snippets.push_str(&format!("extern \"C\" void {}();\n", n));
+                }
                 self.snippets.push_str(&snip);
             }
         }
