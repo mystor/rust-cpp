@@ -88,7 +88,7 @@ macro_rules! __cpp_internal {
         #[doc(hidden)]
         pub extern "C" fn $i($($an : *const $at),*) {
             $(let $an : $at = unsafe { $an.read() };)*
-            { $($body)* }
+            (|| { $($body)* })();
             $(::std::mem::forget($an);)*
 
         }
