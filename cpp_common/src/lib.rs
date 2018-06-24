@@ -7,8 +7,13 @@ extern crate cpp_synom as synom;
 #[macro_use]
 extern crate quote;
 
+#[macro_use]
+extern crate lazy_static;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
+use std::env;
 
 use syn::{Ident, MetaItem, Spanned, Ty};
 
@@ -45,6 +50,21 @@ pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
     134, 183, 212, 227, 31,  217, 12,  5,   65,  221, 150, 59,  230, 96,  73,  62,
 ];
 
+lazy_static! {
+    pub static ref OUT_DIR: PathBuf =
+        PathBuf::from(env::var("OUT_DIR").expect(r#"
+-- rust-cpp fatal error --
+
+The OUT_DIR environment variable was not set.
+NOTE: rustc must be run by Cargo."#));
+
+    pub static ref FILE_HASH: u64 = {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        OUT_DIR.hash(&mut hasher);
+        hasher.finish()
+    };
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Capture {
     pub mutable: bool,
@@ -77,6 +97,7 @@ impl ClosureSig {
 pub struct Closure {
     pub sig: ClosureSig,
     pub body: Spanned<String>,
+    pub callback_offset: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -119,8 +140,16 @@ pub enum Macro {
     Lit(Spanned<String>),
 }
 
+pub struct RustInvocation {
+    pub begin: usize,
+    pub end: usize,
+    pub id: Ident,
+    pub return_type: Option<String>,
+    pub arguments: Vec<(String, String)>, // Vec of name and type
+}
+
 pub mod parsing {
-    use super::{Capture, Class, Closure, ClosureSig, Macro};
+    use super::{Capture, Class, Closure, ClosureSig, Macro, RustInvocation};
     use syn::parse::{ident, lit, string, tt, ty};
     use syn::{Ident, MetaItem, NestedMetaItem, Spanned, Ty, DUMMY_SPAN};
     use synom::space::{block_comment, whitespace};
@@ -204,6 +233,7 @@ pub mod parsing {
                              std_body: code.node.clone(),
                          },
                          body: code,
+                         callback_offset: 0
                      })));
 
     named!(pub build_macro -> Macro , mac_body!(alt!(
@@ -280,4 +310,45 @@ pub mod parsing {
             })));
 
     named!(pub class_macro -> Class , mac_body!(cpp_class));
+
+    named!(rust_macro_argument -> (String, String),
+        do_parse!(
+            name: ident >>
+            punct!(":") >>
+            ty >>
+            keyword!("as") >>
+            cty: string >>
+            ((name.as_ref().to_owned(), cty.value))));
+
+    named!(pub find_rust_macro -> RustInvocation,
+        do_parse!(
+            alt!(take_until!("rust!") | take_until!("rust !")) >>
+            begin: spanned!(keyword!("rust")) >>
+            punct!("!") >>
+            punct!("(") >>
+            id: ident >>
+            punct!("[") >>
+            args: separated_list!(punct!(","), rust_macro_argument) >>
+            punct!("]") >>
+            rty : option!(do_parse!(punct!("->") >>
+                    ty >>
+                    keyword!("as") >>
+                    cty: string >>
+                    (cty.value))) >>
+            tt >>
+            end: spanned!(punct!(")")) >>
+            (RustInvocation{
+                begin: begin.span.lo,
+                end: end.span.hi,
+                id: id,
+                return_type: rty,
+                arguments: args
+            })));
+
+    named!(pub find_all_rust_macro -> Vec<RustInvocation>,
+        do_parse!(
+            r : many0!(find_rust_macro) >>
+            many0!(alt!( tt => {|_| ""} | punct!("]") | punct!(")") | punct!("}")))
+            >> (r)));
+
 }

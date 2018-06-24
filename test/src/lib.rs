@@ -409,3 +409,20 @@ fn with_unsafe() {
     let x = 45;
     assert_eq!(cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }), 46);
 }
+
+#[test]
+fn rust_submacro_closure() {
+    let mut result = unsafe { cpp!([] -> i32 as "int" {
+        auto x = rust!(bbb []-> A as "A" { A::new(5,7) }).multiply();
+        auto y = []{ A a(3,2); return rust!(aaa [a : A as "A"] -> i32 as "int" { a.multiply() }); }();
+        return x + y;
+    })};
+    assert_eq!(result, 5*7+3*2);
+
+    unsafe { cpp!([mut result as "int"] {
+        A a(9,2);
+        rust!(ccc [a : A as "A", result : &mut i32 as "int&"] { *result = a.multiply(); });
+    })};
+    assert_eq!(result, 18);
+
+}

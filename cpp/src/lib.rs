@@ -69,34 +69,32 @@ pub use cpp_macros::*;
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __cpp_internal {
-    (@find_rust_macro rust!($($rust_body:tt)*) $($rest:tt)*) => {
-        __cpp_internal!{ @expand_rust_macro $($rust_body)* }
-        __cpp_internal!{ @find_rust_macro $($rest)* }
+    (@find_rust_macro [$($a:tt)*] rust!($($rust_body:tt)*) $($rest:tt)*) => {
+        __cpp_internal!{ @expand_rust_macro [$($a)*] $($rust_body)* }
+        __cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* }
     };
-    (@find_rust_macro ( $($in:tt)* ) $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
-    (@find_rust_macro [ $($in:tt)* ] $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
-    (@find_rust_macro { $($in:tt)* } $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro $($in)* $($rest)* }  };
-    (@find_rust_macro $t:tt $($rest:tt)*) =>
-        { __cpp_internal!{ @find_rust_macro $($rest)* } };
-    (@find_rust_macro) => {};
+    (@find_rust_macro [$($a:tt)*] ( $($in:tt)* ) $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+    (@find_rust_macro [$($a:tt)*] [ $($in:tt)* ] $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+    (@find_rust_macro [$($a:tt)*] { $($in:tt)* } $($rest:tt)* ) =>
+        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+    (@find_rust_macro [$($a:tt)*] $t:tt $($rest:tt)*) =>
+        { __cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* } };
+    (@find_rust_macro [$($a:tt)*]) => {};
 
-    (@expand_rust_macro $i:ident [$($an:ident : $at:ty as $ac:tt),*] {$($body:tt)*}) => {
-        #[no_mangle]
+    (@expand_rust_macro [$($a:tt)*] $i:ident [$($an:ident : $at:ty as $ac:tt),*] {$($body:tt)*}) => {
         #[doc(hidden)]
-        pub extern "C" fn $i($($an : *const $at),*) {
+        $($a)* extern "C" fn $i($($an : *const $at),*) {
             $(let $an : $at = unsafe { $an.read() };)*
             (|| { $($body)* })();
             $(::std::mem::forget($an);)*
 
         }
     };
-    (@expand_rust_macro $i:ident [$($an:ident : $at:ty as $ac:tt),*] -> $rt:ty as $rc:tt {$($body:tt)*}) => {
-        #[no_mangle]
+    (@expand_rust_macro [$($a:tt)*] $i:ident [$($an:ident : $at:ty as $ac:tt),*] -> $rt:ty as $rc:tt {$($body:tt)*}) => {
         #[doc(hidden)]
-        pub extern "C" fn $i($($an : *const $at, )* rt : *mut $rt) -> *mut $rt {
+        $($a)* extern "C" fn $i($($an : *const $at, )* rt : *mut $rt) -> *mut $rt {
             $(let $an : $at = unsafe { $an.read() };)*
             {
                 #[allow(unused_mut)]
@@ -154,8 +152,8 @@ macro_rules! __cpp_internal {
 ///
 /// ## rust! pseudo-macro
 ///
-/// The first variant of the cpp! macro can contain, in the C++ code, a rust! sub-
-/// macro, which allows to include rust code in C++ code. This is useful to
+/// The cpp! macro can contain, in the C++ code, a rust! sub-macro, which allows
+/// to include rust code in C++ code. This is useful to
 /// implement callback or override virtual functions. Example:
 ///
 /// ```ignore
@@ -187,11 +185,12 @@ macro_rules! __cpp_internal {
 #[macro_export]
 macro_rules! cpp {
     // raw text inclusion
-    ({$($body:tt)*}) => { __cpp_internal!{ @find_rust_macro $($body)*} };
+    ({$($body:tt)*}) => { __cpp_internal!{ @find_rust_macro [#[no_mangle] pub] $($body)*} };
 
     // inline closure
     ([$($captures:tt)*] $($rest:tt)*) => {
         {
+            __cpp_internal!{ @find_rust_macro [] $($rest)*}
             #[allow(unused)]
             #[derive(__cpp_internal_closure)]
             enum CppClosureInput {
