@@ -29,7 +29,10 @@ cpp!{{
     }
     void *callRust2(void *ptr)  {
         int a = 3;
-        return rust!(ptrCallback [ptr : *mut u32 as "void*", a : u32 as "int"] -> *mut u32 as "void *"
+        typedef int LocalInt;
+        typedef void * VoidStar;
+        return rust!(ptrCallback [ptr : *mut u32 as "void*", a : u32 as "LocalInt"]
+            -> *mut u32 as "VoidStar"
         { unsafe {*ptr += a}; return ptr; });
     }
 }}
