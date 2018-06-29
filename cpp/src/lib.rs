@@ -101,7 +101,7 @@ macro_rules! __cpp_internal {
             {
                 #[allow(unused_mut)]
                 let mut lambda = || {$($body)*};
-                unsafe { std::ptr::write(rt, lambda()) };
+                unsafe { ::std::ptr::write(rt, lambda()) };
             }
             $(::std::mem::forget($an);)*
             rt
