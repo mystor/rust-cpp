@@ -337,3 +337,9 @@ fn witin_macro() {
     let s = format!("hello{}", unsafe { cpp!([] -> u32 as "int" { return 14; }) } );
     assert_eq!(s, "hello14");
 }
+
+#[test]
+fn with_unsafe() {
+    let x = 45;
+    assert_eq!(cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }), 46);
+}
