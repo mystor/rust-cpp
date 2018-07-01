@@ -174,7 +174,8 @@ pub mod parsing {
            ));
 
     named!(pub cpp_closure -> Closure,
-           do_parse!(captures: captures >>
+           do_parse!(option!(keyword!("unsafe")) >>
+                     captures: captures >>
                      ret: ret_ty >>
                      code: code_block >>
                      (Closure {

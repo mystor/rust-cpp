@@ -136,7 +136,17 @@ macro_rules! __cpp_internal {
 /// ```ignore
 /// let y: i32 = 10;
 /// let mut z: i32 = 20;
-/// let x: i32 = cpp!([y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
+/// let x: i32 = unsafe { cpp!([y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
+///     z++;
+///     return y + z;
+/// })};
+/// ```
+///
+/// You can also put the unsafe keyword as the first keyword of the cpp! macro, which
+/// has the same effect as putting the whole macro in an unsafe block:
+///
+/// ```ignore
+/// let x: i32 = cpp!(unsafe [y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
 ///     z++;
 ///     return y + z;
 /// });
@@ -190,6 +200,9 @@ macro_rules! cpp {
             __cpp_closure_impl![$($captures)*]
         }
     };
+
+    // wrap unsafe
+    (unsafe $($tail:tt)*) => { unsafe { cpp!($($tail)*) } };
 }
 
 #[doc(hidden)]
