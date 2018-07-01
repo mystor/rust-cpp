@@ -94,7 +94,6 @@ impl Class {
         self.name.hash(&mut hasher);
         self.cpp.hash(&mut hasher);
         self.public.hash(&mut hasher);
-        self.attrs.hash(&mut hasher);
         hasher.finish()
     }
 
@@ -124,6 +123,7 @@ pub mod parsing {
     use super::{Capture, Class, Closure, ClosureSig, Macro};
     use syn::parse::{ident, lit, string, tt, ty};
     use syn::{Ident, MetaItem, NestedMetaItem, Spanned, Ty, DUMMY_SPAN};
+    use synom::space::{block_comment, whitespace};
 
     macro_rules! mac_body {
         ($i: expr, $submac:ident!( $($args:tt)* )) => {
@@ -218,12 +218,24 @@ pub mod parsing {
 
     //FIXME: make cpp_syn::attr::parsing::outer_attr  public
     // This is just a trimmed down version of it
-    named!(pub outer_attr -> MetaItem, do_parse!(
-        punct!("#") >>
-        punct!("[") >>
-        attr: meta_item >>
-        punct!("]") >>
-        (attr)
+    named!(pub outer_attr -> MetaItem, alt!(
+        do_parse!(
+            punct!("#") >>
+            punct!("[") >>
+            attr: meta_item >>
+            punct!("]") >>
+            (attr)
+        ) | do_parse!(
+            punct!("///") >>
+            not!(tag!("/")) >>
+            content: spanned!(take_until!("\n")) >>
+            (MetaItem::NameValue("doc".into(), content.node.into()))
+        ) | do_parse!(
+            option!(whitespace) >>
+            peek!(tuple!(tag!("/**"), not!(tag!("*")))) >>
+            com: block_comment >>
+            (MetaItem::NameValue("doc".into(), com[3..com.len()-2].into()))
+        )
     ));
 
     named!(meta_item -> MetaItem, alt!(
