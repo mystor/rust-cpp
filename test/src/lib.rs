@@ -34,7 +34,11 @@ cpp!{{
     }
 }}
 
-cpp_class!(pub unsafe struct A as "A");
+cpp_class!(
+    /// Documentation comments
+    /** More /*comments*/ */
+    pub unsafe struct A as "A");
+
 impl A {
     fn new(a : i32, b: i32) -> Self {
         unsafe {
