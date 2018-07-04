@@ -271,6 +271,9 @@ macro_rules! cpp_class {
     ($(#[$($attrs:tt)*])* pub unsafe struct $name:ident as $type:expr) => {
         __cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub] [unsafe struct $name as $type] }
     };
+    ($(#[$($attrs:tt)*])* pub($($pub:tt)*) unsafe struct $name:ident as $type:expr) => {
+        __cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub($($pub)*)] [unsafe struct $name as $type] }
+    };
 }
 
 /// Implementation details for cpp_class!

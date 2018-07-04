@@ -198,7 +198,7 @@ fn member_function() {
     assert_eq!(a.multiply(), 5*6);
 }
 
-cpp_class!(unsafe struct B as "B");
+cpp_class!(pub(crate) unsafe struct B as "B");
 impl B {
     fn new(a : i32, b: i32) -> Self {
         unsafe {

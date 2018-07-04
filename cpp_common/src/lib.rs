@@ -295,7 +295,9 @@ pub mod parsing {
     named!(pub cpp_class -> Class,
            do_parse!(
             attrs: many0!(outer_attr) >>
-            is_pub: option!(keyword!("pub")) >>
+            is_pub: option!(tuple!(
+                keyword!("pub"),
+                option!(delimited!(punct!("("), many0!(tt), punct!(")"))))) >>
             keyword!("unsafe") >>
             keyword!("struct") >>
             name: ident >>
