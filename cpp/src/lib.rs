@@ -211,15 +211,9 @@ pub trait CppTrait {
     const CPP_TYPE: &'static str;
 }
 
-/// This macro allow to wrap a relocatable C++ struct or class that might
-/// have destructor or copy constructor, and instantiate the Drop and Clone
-/// trait appropriately.
-///
-/// Warning: This only work if the C++ class that are relocatable, i.e., that
-/// can be moved in memory using memmove.
-/// This disallows most classes from the standard library.
-/// This restriction exists because rust is allowed to move your types around.
-/// Most C++ types that do not contain self-references or
+/// This macro allow to wrap a relocatable C++ struct or class that might have
+/// destructor or copy constructor, instantiating the Drop and Clone trait
+/// appropriately.
 ///
 /// ```ignore
 /// cpp_class!(pub unsafe struct MyClass as "MyClass");
@@ -241,11 +235,6 @@ pub trait CppTrait {
 /// class is copyable (or `Copy` if it is trivially copyable), and `Default` if the class
 /// is default constructible
 ///
-/// The presence of the unsafe keyword in the macro is required as this macro is
-/// calling potentially unsafe. The C++ constructors and destructor might be called
-/// when the class is created/cloned/destructed. You must ensure that the C++ class
-/// can be safely moved in memory.
-///
 /// ## Derived Traits
 ///
 /// The `Default`, `Clone` and `Copy` traits are implicitly implemented if the C++
@@ -262,6 +251,23 @@ pub trait CppTrait {
 ///   be called twice. Note that it will never return None.
 /// * The trait `Ord` can also be specified when the semantics of the `operator<` corresponds
 ///   to a total order
+///
+/// ## Safety Warning
+///
+/// Use of this macro is highly unsafe. Only certain C++ classes can be bound
+/// to, C++ classes may perform arbitrary unsafe operations, and invariants are
+/// easy to break.
+///
+/// A notable restriction is that this macro only works if the C++ class is
+/// relocatable, i.e., can be moved in memory using `memmove`.
+///
+/// Unfortunately, as the STL often uses internal self-references for
+/// optimization purposes, such as the small-string optimization, this disallows
+/// most std:: classes. This restriction exists because safe rust is allowed to
+/// move your types around.
+///
+/// Most C++ types which do not contain self-references will be compatible,
+/// although this property cannot be statically checked by rust-cpp.
 ///
 #[macro_export]
 macro_rules! cpp_class {
