@@ -1,7 +1,7 @@
 [package]
 name = "cpp"
 version = "0.4.0"
-authors = ["Nika Layzell <nika@thelayzells.com>"]
+authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 description = "Inline C++ code closures"
 readme = "../README.md"
 license = "MIT/Apache-2.0"
