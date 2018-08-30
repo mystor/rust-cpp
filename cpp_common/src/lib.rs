@@ -11,9 +11,9 @@ extern crate quote;
 extern crate lazy_static;
 
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::env;
 
 use syn::{Ident, MetaItem, Spanned, Ty};
 
@@ -23,11 +23,11 @@ pub const LIB_NAME: &'static str = "librust_cpp_generated.a";
 pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
 
 pub mod flags {
-    pub const IS_COPY_CONSTRUCTIBLE : u32 = 0;
-    pub const IS_DEFAULT_CONSTRUCTIBLE : u32 = 1;
-    pub const IS_TRIVIALLY_DESTRUCTIBLE : u32 = 2;
-    pub const IS_TRIVIALLY_COPYABLE : u32 = 3;
-    pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE : u32 = 4;
+    pub const IS_COPY_CONSTRUCTIBLE: u32 = 0;
+    pub const IS_DEFAULT_CONSTRUCTIBLE: u32 = 1;
+    pub const IS_TRIVIALLY_DESTRUCTIBLE: u32 = 2;
+    pub const IS_TRIVIALLY_COPYABLE: u32 = 3;
+    pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE: u32 = 4;
 }
 
 /// This constant is expected to be a unique string within the compiled binary
@@ -51,13 +51,13 @@ pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
 ];
 
 lazy_static! {
-    pub static ref OUT_DIR: PathBuf =
-        PathBuf::from(env::var("OUT_DIR").expect(r#"
+    pub static ref OUT_DIR: PathBuf = PathBuf::from(env::var("OUT_DIR").expect(
+        r#"
 -- rust-cpp fatal error --
 
 The OUT_DIR environment variable was not set.
-NOTE: rustc must be run by Cargo."#));
-
+NOTE: rustc must be run by Cargo."#
+    ));
     pub static ref FILE_HASH: u64 = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         OUT_DIR.hash(&mut hasher);

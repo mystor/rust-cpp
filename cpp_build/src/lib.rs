@@ -5,8 +5,8 @@
 //! documentation](https://docs.rs/cpp).
 
 extern crate cpp_common;
-extern crate cpp_synom as synom;
 extern crate cpp_syn as syn;
+extern crate cpp_synom as synom;
 
 extern crate cpp_synmap;
 
@@ -15,15 +15,17 @@ extern crate cc;
 #[macro_use]
 extern crate lazy_static;
 
+use cpp_common::{
+    flags, parsing, Capture, Class, Closure, ClosureSig, Macro, FILE_HASH, LIB_NAME, OUT_DIR,
+    STRUCT_METADATA_MAGIC, VERSION,
+};
+use cpp_synmap::SourceMap;
 use std::env;
-use std::path::{Path, PathBuf};
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
+use std::path::{Path, PathBuf};
 use syn::visit::Visitor;
-use syn::{Mac, Spanned, DUMMY_SPAN, Ident, Token, TokenTree};
-use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, Class, LIB_NAME, STRUCT_METADATA_MAGIC,
-                 VERSION, OUT_DIR, FILE_HASH, flags};
-use cpp_synmap::SourceMap;
+use syn::{Ident, Mac, Spanned, Token, TokenTree, DUMMY_SPAN};
 
 fn warnln_impl(a: String) {
     for s in a.lines() {
@@ -41,8 +43,8 @@ macro_rules! warnln {
 // Note: if the this macro is itself in a macro, it should be on on the same line of the macro
 macro_rules! add_line {
     ($e:expr) => {
-        concat!("#line ", line!() , " \"", file!(), "\"\n", $e)
-    }
+        concat!("#line ", line!(), " \"", file!(), "\"\n", $e)
+    };
 }
 
 const INTERNAL_CPP_STRUCTS: &'static str = add_line!(r#"
@@ -128,13 +130,13 @@ template<typename T> int compare_helper(const T &a, const T&b, int cmp) {
 
 lazy_static! {
     static ref CPP_DIR: PathBuf = OUT_DIR.join("rust_cpp");
-
-    static ref CARGO_MANIFEST_DIR: PathBuf =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(r#"
+    static ref CARGO_MANIFEST_DIR: PathBuf = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(
+        r#"
 -- rust-cpp fatal error --
 
 The CARGO_MANIFEST_DIR environment variable was not set.
-NOTE: rust-cpp's build function must be run in a build script."#));
+NOTE: rust-cpp's build function must be run in a build script."#
+    ));
 }
 
 enum ExpandSubMacroType<'a> {
@@ -160,35 +162,54 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> String {
                 }
                 ExpandSubMacroType::Closure(ref mut offset) => {
                     **offset += 1;
-                    format!("rust_cpp_callbacks{file_hash}[{offset}]",
-                        file_hash = *FILE_HASH, offset = **offset - 1).into()
+                    format!(
+                        "rust_cpp_callbacks{file_hash}[{offset}]",
+                        file_hash = *FILE_HASH,
+                        offset = **offset - 1
+                    ).into()
                 }
             };
 
-            let mut decl_types = rust_invocation.arguments.iter().map(|&(_, ref val)| {
-                    format!("rustcpp::argument_helper<{}>::type", val)
-                }).collect::<Vec<_>>();
-            let mut call_args = rust_invocation.arguments.iter().map(|&(ref val, _)| val.as_ref()).collect::<Vec<_>>();
+            let mut decl_types = rust_invocation
+                .arguments
+                .iter()
+                .map(|&(_, ref val)| format!("rustcpp::argument_helper<{}>::type", val))
+                .collect::<Vec<_>>();
+            let mut call_args = rust_invocation
+                .arguments
+                .iter()
+                .map(|&(ref val, _)| val.as_ref())
+                .collect::<Vec<_>>();
 
             let fn_call = match rust_invocation.return_type {
-                None => {
-                    format!("reinterpret_cast<void (*)({types})>({f})({args})",
-                        f = fn_name, types = decl_types.join(", "), args = call_args.join(", "))
-                }
+                None => format!(
+                    "reinterpret_cast<void (*)({types})>({f})({args})",
+                    f = fn_name,
+                    types = decl_types.join(", "),
+                    args = call_args.join(", ")
+                ),
                 Some(rty) => {
                     decl_types.push(format!("rustcpp::return_helper<{rty}>", rty = rty));
                     call_args.push("0");
-                    format!("std::move(*reinterpret_cast<{rty}*(*)({types})>({f})({args}))",
-                        rty = rty, f = fn_name, types = decl_types.join(", "), args = call_args.join(", "))
+                    format!(
+                        "std::move(*reinterpret_cast<{rty}*(*)({types})>({f})({args}))",
+                        rty = rty,
+                        f = fn_name,
+                        types = decl_types.join(", "),
+                        args = call_args.join(", ")
+                    )
                 }
             };
 
             let fn_call = {
                 // remove the rust! macro from the C++ snippet
-                let orig = result.drain(rust_invocation.begin .. rust_invocation.end);
+                let orig = result.drain(rust_invocation.begin..rust_invocation.end);
                 // add \ņ to the invocation in order to keep the same amount of line numbers
                 // so errors point to the right line.
-                orig.filter(|x| *x == '\n').fold(fn_call, |mut res, _| {res.push('\n'); res})
+                orig.filter(|x| *x == '\n').fold(fn_call, |mut res, _| {
+                    res.push('\n');
+                    res
+                })
             };
             // add the invocation of call where the rust! macro used to be.
             result.insert_str(rust_invocation.begin, &fn_call);
@@ -207,18 +228,29 @@ fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
     write!(output, "{}", INTERNAL_CPP_STRUCTS).unwrap();
 
     if visitor.callbacks_count > 0 {
-        write!(output, add_line!(r#"
+        write!(
+            output,
+            add_line!(
+                r#"
 extern "C" {{
     void (*rust_cpp_callbacks{file_hash}[{callbacks_count}])() = {{}};
 }}
-        "#), file_hash = *FILE_HASH, callbacks_count = visitor.callbacks_count).unwrap();
+        "#
+            ),
+            file_hash = *FILE_HASH,
+            callbacks_count = visitor.callbacks_count
+        ).unwrap();
     }
-
 
     write!(output, "{}\n\n", &visitor.snippets).unwrap();
 
     let mut sizealign = vec![];
-    for &Closure { ref body, ref sig, ref callback_offset } in &visitor.closures {
+    for &Closure {
+        ref body,
+        ref sig,
+        ref callback_offset,
+    } in &visitor.closures
+    {
         let &ClosureSig {
             ref captures,
             ref cpp,
@@ -262,23 +294,29 @@ extern "C" {{
                      mutable,
                      ref name,
                      ref cpp,
-                 }| if mutable {
-                    format!("{} & {}", cpp, name)
-                } else {
-                    format!("{} const& {}", cpp, name)
+                 }| {
+                    if mutable {
+                        format!("{} & {}", cpp, name)
+                    } else {
+                        format!("{} const& {}", cpp, name)
+                    }
                 },
             )
             .collect::<Vec<_>>()
             .join(", ");
 
         if is_void {
-            write!(output, add_line!(r#"
+            write!(
+                output,
+                add_line!(
+                    r#"
 extern "C" {{
 void {name}({params}) {{
 {body}
 }}
 }}
-"#),
+"#
+                ),
                 name = &name,
                 params = params,
                 body = body.node
@@ -290,7 +328,10 @@ void {name}({params}) {{
                 .map(|&Capture { ref name, .. }| name.as_ref())
                 .collect::<Vec<_>>()
                 .join(", ");
-            write!(output, add_line!(r#"
+            write!(
+                output,
+                add_line!(
+                    r#"
 static inline {ty} {name}_impl({params}) {{
 {body}
 }}
@@ -299,7 +340,8 @@ void {name}({params}{comma} void* __result) {{
     ::new(__result) ({ty})({name}_impl({args}));
 }}
 }}
-"#),
+"#
+                ),
                 name = &name,
                 params = params,
                 comma = comma,
@@ -454,7 +496,10 @@ impl Config {
     pub fn new() -> Config {
         let mut cc = cc::Build::new();
         cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
-        Config { cc: cc, std_flag_set: false }
+        Config {
+            cc: cc,
+            std_flag_set: false,
+        }
     }
 
     /// Add a directory to the `-I` or include path for headers
@@ -723,12 +768,12 @@ struct Handle<'a> {
 }
 
 fn line_directive(span: syn::Span, sm: &SourceMap) -> String {
-        let loc = sm.locinfo(span).unwrap();
-        let mut line = format!("#line {} {:?}\n", loc.line, loc.path);
-        for _ in 0..loc.col {
-            line.push(' ');
-        }
-        return line;
+    let loc = sm.locinfo(span).unwrap();
+    let mut line = format!("#line {} {:?}\n", loc.line, loc.path);
+    for _ in 0..loc.col {
+        line.push(' ');
+    }
+    return line;
 }
 
 fn extract_with_span(spanned: &mut Spanned<String>, src: &str, offset: usize, sm: &SourceMap) {
