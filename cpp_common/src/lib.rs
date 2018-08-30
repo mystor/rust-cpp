@@ -200,7 +200,7 @@ pub mod parsing {
                              cpp: ret.1,
                              // Need to filter the spaces because there is a difference between
                              // proc_macro2 and proc_macro and the hashes would not match
-                             std_body: code.to_string().chars().filter(|x| *x != ' ').collect(),
+                             std_body: code.to_string().chars().filter(|x| *x != ' ' && *x != '\n').collect(),
                          },
                          body: code.to_string(),
                          callback_offset: 0
