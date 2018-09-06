@@ -1,4 +1,4 @@
-use cpp_common::{parsing, Class, Closure, Macro};
+use cpp_common::{Class, Closure, Macro, RustInvocation};
 use regex::Regex;
 use std::fmt;
 use std::fs::File;
@@ -15,7 +15,7 @@ pub enum Error {
     },
     ParseSyntaxError {
         src_path: String,
-        error: syn::synom::ParseError,
+        error: syn::parse::Error,
     },
     LexError {
         src_path: String,
@@ -41,6 +41,27 @@ impl fmt::Display for Error {
     }
 }
 
+#[derive(Debug)]
+struct LineError(u32, String);
+
+impl LineError {
+    fn add_line(self, a: u32) -> LineError {
+        LineError(self.0 + a, self.1)
+    }
+}
+
+impl fmt::Display for LineError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.0 + 1, self.1)
+    }
+}
+
+impl From<LexError> for LineError {
+    fn from(e: LexError) -> Self {
+        LineError(e.line, "Lexing error".into())
+    }
+}
+
 enum ExpandSubMacroType<'a> {
     Lit,
     Closure(&'a mut u32), // the offset
@@ -49,7 +70,7 @@ enum ExpandSubMacroType<'a> {
 // Given a string containing some C++ code with a rust! macro,
 // this functions expand the rust! macro to a call to an extern
 // function
-fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<String, LexError> {
+fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<String, LineError> {
     let mut result = input;
     let mut extra_decl = String::new();
     let mut search_index = 0;
@@ -59,16 +80,13 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
             cursor = cursor.advance(search_index + index);
             search_index = cursor.off as usize + 4;
             let end = find_delimited((find_delimited(cursor, "(")?.0).advance(1), ")")?.0;
-            let input = syn::buffer::TokenBuffer::new2(
-                (&cursor.rest[..(end.off + 1 - cursor.off) as usize])
-                    .parse()
-                    .unwrap(),
-            );
-            if let Ok(mut rust_invocation) = parsing::find_rust_macro(input.begin()) {
-                (rust_invocation.0, cursor.off as usize, end.off as usize + 1)
-            } else {
-                continue;
-            }
+            let input: ::proc_macro2::TokenStream = (&cursor.rest
+                [..(end.off + 1 - cursor.off) as usize])
+                .parse()
+                .map_err(|_| LineError(cursor.line, "TokenStream parse error".into()))?;
+            let rust_invocation = ::syn::parse2::<RustInvocation>(input)
+                .map_err(|e| LineError(cursor.line, e.to_string()))?;
+            (rust_invocation, cursor.off as usize, end.off as usize + 1)
         };
         let fn_name = match t {
             ExpandSubMacroType::Lit => {
@@ -404,10 +422,20 @@ impl Parser {
                 let size = (cursor.off - macro_cur.off) as usize;
                 macro_cur.rest = &macro_cur.rest[..size];
                 if ident == "cpp" {
-                    self.handle_cpp(macro_cur)?;
+                    self.handle_cpp(macro_cur).unwrap_or_else(|e| {
+                        panic!(
+                            "Error while parsing cpp! macro:\n{:?}:{}",
+                            self.current_path, e
+                        )
+                    });
                 } else {
                     debug_assert_eq!(ident, "cpp_class");
-                    self.handle_cpp_class(macro_cur)?;
+                    self.handle_cpp_class(macro_cur).unwrap_or_else(|e| {
+                        panic!(
+                            "Error while parsing cpp_class! macro:\n{:?}:{}",
+                            self.current_path, e
+                        )
+                    });
                 }
                 continue;
             }
@@ -426,51 +454,44 @@ impl Parser {
         }
     }
 
-    fn lex_error2(&self) -> Error {
-        Error::LexError {
-            src_path: self.current_path.clone().to_str().unwrap().to_owned(),
-            line: 0,
-        }
-    }
-
-    fn handle_cpp(&mut self, x: Cursor) -> Result<(), Error> {
+    fn handle_cpp(&mut self, x: Cursor) -> Result<(), LineError> {
         // Since syn don't give the exact string, we extract manually
-        let begin = (find_delimited(x, "{").map_err(|e| self.lex_error(e))?.0).advance(1);
-        let end = find_delimited(begin, "}").map_err(|e| self.lex_error(e))?.0;
+        let begin = (find_delimited(x, "{")?.0).advance(1);
+        let end = find_delimited(begin, "}")?.0;
         let extracted = &begin.rest[..(end.off - begin.off) as usize];
-        let extracted = line_directive(&self.current_path, begin) + extracted;
 
-        let input = syn::buffer::TokenBuffer::new2(x.rest.parse().map_err(|_| self.lex_error2())?);
-        match parsing::build_macro(input.begin())
-            .expect(&format!("cpp! macro at {:?}:{}", self.current_path, x.line))
-            .0
-        {
+        let input: ::proc_macro2::TokenStream = x
+            .rest
+            .parse()
+            .map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
+        match ::syn::parse2::<Macro>(input).map_err(|e| LineError(x.line, e.to_string()))? {
             Macro::Closure(mut c) => {
                 c.callback_offset = self.callbacks_count;
-                c.body = expand_sub_rust_macro(
-                    extracted.to_string(),
-                    ExpandSubMacroType::Closure(&mut self.callbacks_count),
-                ).map_err(|e| self.lex_error(e))?;
+                c.body_str = line_directive(&self.current_path, begin)
+                    + &expand_sub_rust_macro(
+                        extracted.to_string(),
+                        ExpandSubMacroType::Closure(&mut self.callbacks_count),
+                    ).map_err(|e| e.add_line(begin.line))?;
                 self.closures.push(c);
             }
             Macro::Lit(_l) => {
                 self.snippets.push('\n');
-                let snip = expand_sub_rust_macro(extracted.to_string(), ExpandSubMacroType::Lit)
-                    .map_err(|e| self.lex_error(e))?;
+                let snip = line_directive(&self.current_path, begin)
+                    + &expand_sub_rust_macro(extracted.to_string(), ExpandSubMacroType::Lit)
+                        .map_err(|e| e.add_line(begin.line))?;
                 self.snippets.push_str(&snip);
             }
         }
         Ok(())
     }
 
-    fn handle_cpp_class(&mut self, x: Cursor) -> Result<(), Error> {
-        let input = syn::buffer::TokenBuffer::new2(x.rest.parse().map_err(|_| self.lex_error2())?);
-        let mut class = parsing::cpp_class(input.begin())
-            .expect(&format!(
-                "cpp_class! macro at {:?}:{}",
-                self.current_path, x.line
-            ))
-            .0;
+    fn handle_cpp_class(&mut self, x: Cursor) -> Result<(), LineError> {
+        let input: ::proc_macro2::TokenStream = x
+            .rest
+            .parse()
+            .map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
+        let mut class =
+            ::syn::parse2::<Class>(input).map_err(|e| LineError(x.line, e.to_string()))?;
         class.line = line_directive(&self.current_path, x);
         self.classes.push(class);
         Ok(())

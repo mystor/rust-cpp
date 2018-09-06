@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate syn;
 extern crate proc_macro2;
-#[macro_use]
-extern crate quote;
 
 #[macro_use]
 extern crate lazy_static;
@@ -12,7 +10,9 @@ use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
-use proc_macro2::{Span, TokenTree};
+use proc_macro2::{Span, TokenStream, TokenTree};
+use syn::ext::IdentExt;
+use syn::parse::{Parse, ParseStream, Result};
 use syn::{Attribute, Ident, Type};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -70,10 +70,24 @@ pub struct Capture {
     pub cpp: String,
 }
 
+impl Parse for Capture {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Capture {
+            mutable: input.parse::<Option<Token![mut]>>()?.is_some(),
+            // mutable: input.peek(Token![mut]) && { input.parse::<Token![mut]>()?; true },
+            name: input.call(Ident::parse_any)?,
+            cpp: {
+                input.parse::<Token![as]>()?;
+                input.parse::<syn::LitStr>()?.value()
+            },
+        })
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ClosureSig {
     pub captures: Vec<Capture>,
-    pub ret: Type,
+    pub ret: Option<Type>,
     pub cpp: String,
     pub std_body: String,
 }
@@ -97,8 +111,50 @@ impl ClosureSig {
 #[derive(Clone, Debug)]
 pub struct Closure {
     pub sig: ClosureSig,
-    pub body: String,
+    pub body: TokenTree,
+    pub body_str: String, // with rust! macro replaced
     pub callback_offset: u32,
+}
+
+impl Parse for Closure {
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.parse::<Option<Token![unsafe]>>()?;
+        let cap_con;
+        bracketed!(cap_con in input);
+        let captures = syn::punctuated::Punctuated::<Capture, Token![,]>::parse_terminated(
+            &cap_con,
+        )?.into_iter()
+            .collect();
+        let (ret, cpp) = if input.peek(Token![->]) {
+            input.parse::<Token![->]>()?;
+            let t: syn::Type = input.parse()?;
+            input.parse::<Token![as]>()?;
+            let s = input.parse::<syn::LitStr>()?.value();
+            (Some(t), s)
+        } else {
+            (None, "void".to_owned())
+        };
+        let body = input.parse::<TokenTree>()?;
+        // Need to filter the spaces because there is a difference between
+        // proc_macro2 and proc_macro and the hashes would not match
+        let std_body = body
+            .to_string()
+            .chars()
+            .filter(|x| *x != ' ' && *x != '\n')
+            .collect();
+
+        Ok(Closure {
+            sig: ClosureSig {
+                captures,
+                ret,
+                cpp,
+                std_body,
+            },
+            body,
+            body_str: String::new(),
+            callback_offset: 0,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -137,10 +193,40 @@ impl Class {
     }
 }
 
+impl Parse for Class {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Class {
+            attrs: input.call(Attribute::parse_outer)?,
+            name: {
+                input.parse::<syn::Visibility>()?;
+                input.parse::<Token![unsafe]>()?;
+                input.parse::<Token![struct]>()?;
+                input.parse()?
+            },
+            cpp: {
+                input.parse::<Token![as]>()?;
+                input.parse::<syn::LitStr>()?.value()
+            },
+            line: String::new(),
+        })
+    }
+}
+
 #[derive(Debug)]
 pub enum Macro {
     Closure(Closure),
-    Lit(TokenTree),
+    Lit(TokenStream),
+}
+
+impl Parse for Macro {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(syn::token::Brace) {
+            let content;
+            braced!(content in input);
+            return Ok(Macro::Lit(content.parse()?));
+        }
+        Ok(Macro::Closure(input.parse::<Closure>()?))
+    }
 }
 
 #[derive(Debug)]
@@ -152,121 +238,47 @@ pub struct RustInvocation {
     pub arguments: Vec<(Ident, String)>, // Vec of name and type
 }
 
-pub mod parsing {
-    use super::{Capture, Class, Closure, ClosureSig, Macro, RustInvocation};
-    use proc_macro2::TokenTree;
-    use syn::{punctuated::Punctuated, Attribute, Ident, LitStr, Type, Visibility};
-
-    named!(ident_or_self -> Ident, alt!(syn!(Ident) |
-        keyword!(self) => { |x| x.into() } ));
-
-    named!(name_as_string -> Capture,
-           do_parse!(
-               is_mut: option!(keyword!(mut)) >>
-                   id: ident_or_self >>
-                   keyword!(as) >>
-                   cty: syn!(LitStr) >>
-                   (Capture {
-                       mutable: is_mut.is_some(),
-                       name: id,
-                       cpp: cty.value()
-                   })
-           ));
-
-    named!(captures -> Vec<Capture>, map!(brackets!(call!(
-        Punctuated::<Capture, Token![,]>::parse_separated_with, name_as_string)), |x| x.1.into_iter().collect()));
-
-    named!(ret_ty -> (Type, String),
-           alt!(
-               do_parse!(punct!(->) >>
-                         rty: syn!(Type) >>
-                         keyword!(as) >>
-                         cty: syn!(LitStr) >>
-                         ((rty, cty.value()))) |
-               value!((parse_quote!{()}, "void".to_owned()))
-           ));
-
-    named!(code_block -> TokenTree, syn!(TokenTree));
-
-    named!(pub cpp_closure -> Closure,
-           do_parse!(option!(keyword!(unsafe)) >>
-                     captures: captures >>
-                     ret: ret_ty >>
-                     code: code_block >>
-                     (Closure {
-                         sig: ClosureSig {
-                             captures: captures,
-                             ret: ret.0,
-                             cpp: ret.1,
-                             // Need to filter the spaces because there is a difference between
-                             // proc_macro2 and proc_macro and the hashes would not match
-                             std_body: code.to_string().chars().filter(|x| *x != ' ' && *x != '\n').collect(),
-                         },
-                         body: code.to_string(),
-                         callback_offset: 0
-                     })));
-
-    named!(pub build_macro -> Macro , alt!(
-        cpp_closure => { |c| Macro::Closure(c) } |
-        code_block => { |b| Macro::Lit(b) }
-    ));
-
-    named!(pub cpp_class -> Class,
-           do_parse!(
-            attrs: many0!(Attribute::parse_outer) >>
-            option!(syn!(Visibility)) >>
-            keyword!(unsafe) >>
-            keyword!(struct) >>
-            name: syn!(Ident) >>
-            keyword!(as) >>
-            cpp_type: syn!(LitStr) >>
-            (Class {
-                name: name,
-                cpp: cpp_type.value(),
-                attrs: attrs,
-                line: String::default(),
-
-            })));
-
-    named!(rust_macro_argument -> (Ident, String),
-        do_parse!(
-            name: syn!(Ident) >>
-            punct!(:) >>
-            syn!(Type) >>
-            keyword!(as) >>
-            cty: syn!(LitStr) >>
-            ((name, cty.value()))));
-
-    named!(pub find_rust_macro -> RustInvocation,
-        do_parse!(
-            begin: custom_keyword!(rust) >>
-            punct!(!) >>
-            content: parens!(do_parse!(
-                id: syn!(Ident) >>
-                args: map!(brackets!(call!(Punctuated::<(Ident, String), Token![,]>::parse_separated_with, rust_macro_argument)),
-                          |x| x.1.into_iter().collect()) >>
-                rty : option!(
-                    do_parse!(punct!(->) >>
-                    syn!(Type) >>
-                    keyword!(as) >>
-                    cty: syn!(LitStr) >>
-                    (cty.value()))) >>
-                syn!(TokenTree) >>
-                (id, args, rty))) >>
-            (RustInvocation{
-                begin: begin.span(),
-                end: (content.0).0,
-                id: (content.1).0,
-                return_type: (content.1).2,
-                arguments: (content.1).1
-            })));
-
-    named!(pub find_all_rust_macro -> Vec<RustInvocation>,
-        map!(many0!(alt!(find_rust_macro => {|x| vec![x] }
-                | map!(brackets!(call!(find_all_rust_macro)), |x| x.1)
-                | map!(parens!(call!(find_all_rust_macro)), |x| x.1)
-                | map!(braces!(call!(find_all_rust_macro)), |x| x.1)
-                | syn!(TokenTree) => { |_| vec![] })),
-            |x| x.into_iter().flat_map(|x|x).collect()));
-
+impl Parse for RustInvocation {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let rust_token: Ident = input.parse()?;
+        if rust_token != "rust" {
+            return Err(syn::parse::Error::new(rust_token.span(), "expected `rust`"));
+        }
+        input.parse::<Token![!]>()?;
+        let content;
+        let p = parenthesized!(content in input);
+        let r = RustInvocation {
+            begin: rust_token.span(),
+            end: p.span,
+            id: content.parse()?,
+            arguments: {
+                let c2;
+                bracketed!(c2 in content);
+                c2.parse_terminated::<(Ident, String), Token![,]>(
+                    |input: ParseStream| -> Result<(Ident, String)> {
+                        let i = input.call(Ident::parse_any)?;
+                        input.parse::<Token![:]>()?;
+                        input.parse::<Type>()?;
+                        input.parse::<Token![as]>()?;
+                        let s = input.parse::<syn::LitStr>()?.value();
+                        Ok((i, s))
+                    },
+                )?
+                    .into_iter()
+                    .collect()
+            },
+            return_type: if content.peek(Token![->]) {
+                content.parse::<Token![->]>()?;
+                content.parse::<Type>()?;
+                content.parse::<Token![as]>()?;
+                Some(content.parse::<syn::LitStr>()?.value())
+            } else {
+                None
+            },
+        };
+        let c3;
+        braced!(c3 in content);
+        c3.parse::<TokenStream>()?;
+        Ok(r)
+    }
 }

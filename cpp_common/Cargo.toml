@@ -11,7 +11,6 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp_common"
 
 [dependencies]
-syn = { version = "0.14", features = ["full", "visit", "extra-traits"] }
+syn = { version = "0.15", features = ["full", "extra-traits"] }
 lazy_static = "1.0"
-quote = "0.6"
 proc-macro2 = "0.4"

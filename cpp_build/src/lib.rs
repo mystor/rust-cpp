@@ -160,9 +160,10 @@ extern "C" {{
 
     let mut sizealign = vec![];
     for &Closure {
-        ref body,
+        ref body_str,
         ref sig,
         ref callback_offset,
+        ..
     } in &visitor.closures
     {
         let &ClosureSig {
@@ -231,7 +232,7 @@ void {name}({params}) {{
                 ),
                 name = &name,
                 params = params,
-                body = body
+                body = body_str
             ).unwrap();
         } else {
             let comma = if params.is_empty() { "" } else { "," };
@@ -257,7 +258,7 @@ void {name}({params}{comma} void* __result) {{
                 comma = comma,
                 ty = cpp,
                 args = args,
-                body = body
+                body = body_str
             ).unwrap();
         }
     }
