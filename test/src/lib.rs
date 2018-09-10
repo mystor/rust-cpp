@@ -421,7 +421,7 @@ fn rust_submacro_closure() {
 
     unsafe { cpp!([mut result as "int"] {
         A a(9,2);
-        rust!(ccc [a : A as "A", result : &mut i32 as "int&"] { *result = a.multiply(); });
+        rust!(Ccc [a : A as "A", result : &mut i32 as "int&"] { *result = a.multiply(); });
     })};
     assert_eq!(result, 18);
 
