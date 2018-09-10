@@ -1,4 +1,6 @@
-//! Adapted from [`nom`](https://github.com/Geal/nom).
+//! Fork of the equivalent file from the proc-macro2 file.
+//! Modified to support line number counting in Cursor.
+//! Also contains some function from stable.rs of proc_macro2.
 
 #![allow(dead_code)] // Why is this needed ?
 
@@ -164,7 +166,7 @@ fn is_whitespace(ch: char) -> bool {
     ch.is_whitespace() || ch == '\u{200e}' || ch == '\u{200f}'
 }
 
-//////
+// --- functions from stable.rs
 
 #[inline]
 fn is_ident_start(c: char) -> bool {

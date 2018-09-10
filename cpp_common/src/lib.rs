@@ -28,6 +28,11 @@ pub mod flags {
     pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE: u32 = 4;
 }
 
+pub mod kw {
+    #![allow(non_camel_case_types)]
+    custom_keyword!(rust);
+}
+
 /// This constant is expected to be a unique string within the compiled binary
 /// which preceeds a definition of the metadata. It begins with
 /// rustcpp~metadata, which is printable to make it easier to locate when
@@ -71,10 +76,11 @@ pub struct Capture {
 }
 
 impl Parse for Capture {
+    /// Parse a single captured variable inside within a cpp! macro.
+    /// Example: `mut foo as "int"`
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Capture {
             mutable: input.parse::<Option<Token![mut]>>()?.is_some(),
-            // mutable: input.peek(Token![mut]) && { input.parse::<Token![mut]>()?; true },
             name: input.call(Ident::parse_any)?,
             cpp: {
                 input.parse::<Token![as]>()?;
@@ -117,14 +123,20 @@ pub struct Closure {
 }
 
 impl Parse for Closure {
+    /// Parse the inside of a cpp! macro when this macro is a closure.
+    /// Example: `unsafe [foo as "int"] -> u32 as "int" { /*... */ }
     fn parse(input: ParseStream) -> Result<Self> {
         input.parse::<Option<Token![unsafe]>>()?;
-        let cap_con;
-        bracketed!(cap_con in input);
+
+        // Capture
+        let capture_content;
+        bracketed!(capture_content in input);
         let captures = syn::punctuated::Punctuated::<Capture, Token![,]>::parse_terminated(
-            &cap_con,
+            &capture_content,
         )?.into_iter()
             .collect();
+
+        // Optional return type
         let (ret, cpp) = if input.peek(Token![->]) {
             input.parse::<Token![->]>()?;
             let t: syn::Type = input.parse()?;
@@ -134,13 +146,14 @@ impl Parse for Closure {
         } else {
             (None, "void".to_owned())
         };
+
         let body = input.parse::<TokenTree>()?;
         // Need to filter the spaces because there is a difference between
         // proc_macro2 and proc_macro and the hashes would not match
         let std_body = body
             .to_string()
             .chars()
-            .filter(|x| *x != ' ' && *x != '\n')
+            .filter(|x| !x.is_whitespace())
             .collect();
 
         Ok(Closure {
@@ -194,6 +207,8 @@ impl Class {
 }
 
 impl Parse for Class {
+    /// Parse the inside of a cpp_class! macro.
+    /// Example: `#[derive(Default)] pub unsafe struct Foobar as "FooBar"`
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Class {
             attrs: input.call(Attribute::parse_outer)?,
@@ -219,6 +234,7 @@ pub enum Macro {
 }
 
 impl Parse for Macro {
+    ///! Parse the inside of a cpp! macro (a literal or a closure)
     fn parse(input: ParseStream) -> Result<Self> {
         if input.peek(syn::token::Brace) {
             let content;
@@ -239,46 +255,43 @@ pub struct RustInvocation {
 }
 
 impl Parse for RustInvocation {
+    /// Parse a rust! macro something looking like `rust!(ident [foo : bar as "bar"] { /*...*/ })`
     fn parse(input: ParseStream) -> Result<Self> {
-        let rust_token: Ident = input.parse()?;
-        if rust_token != "rust" {
-            return Err(syn::parse::Error::new(rust_token.span(), "expected `rust`"));
-        }
+        let rust_token = input.parse::<kw::rust>()?;
         input.parse::<Token![!]>()?;
-        let content;
-        let p = parenthesized!(content in input);
+        let macro_content;
+        let p = parenthesized!(macro_content in input);
         let r = RustInvocation {
-            begin: rust_token.span(),
+            begin: rust_token.span,
             end: p.span,
-            id: content.parse()?,
+            id: macro_content.parse()?,
             arguments: {
-                let c2;
-                bracketed!(c2 in content);
-                c2.parse_terminated::<(Ident, String), Token![,]>(
-                    |input: ParseStream| -> Result<(Ident, String)> {
-                        let i = input.call(Ident::parse_any)?;
-                        input.parse::<Token![:]>()?;
-                        input.parse::<Type>()?;
-                        input.parse::<Token![as]>()?;
-                        let s = input.parse::<syn::LitStr>()?.value();
-                        Ok((i, s))
-                    },
-                )?
+                let capture_content;
+                bracketed!(capture_content in macro_content);
+                capture_content
+                    .parse_terminated::<(Ident, String), Token![,]>(
+                        |input: ParseStream| -> Result<(Ident, String)> {
+                            let i = input.call(Ident::parse_any)?;
+                            input.parse::<Token![:]>()?;
+                            input.parse::<Type>()?;
+                            input.parse::<Token![as]>()?;
+                            let s = input.parse::<syn::LitStr>()?.value();
+                            Ok((i, s))
+                        },
+                    )?
                     .into_iter()
                     .collect()
             },
-            return_type: if content.peek(Token![->]) {
-                content.parse::<Token![->]>()?;
-                content.parse::<Type>()?;
-                content.parse::<Token![as]>()?;
-                Some(content.parse::<syn::LitStr>()?.value())
+            return_type: if macro_content.peek(Token![->]) {
+                macro_content.parse::<Token![->]>()?;
+                macro_content.parse::<Type>()?;
+                macro_content.parse::<Token![as]>()?;
+                Some(macro_content.parse::<syn::LitStr>()?.value())
             } else {
                 None
             },
         };
-        let c3;
-        braced!(c3 in content);
-        c3.parse::<TokenStream>()?;
+        macro_content.parse::<TokenTree>()?;
         Ok(r)
     }
 }
