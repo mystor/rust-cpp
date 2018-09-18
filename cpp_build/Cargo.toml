@@ -14,6 +14,7 @@ documentation = "https://docs.rs/cpp_build"
 lazy_static = "1.0"
 cc = "1.0"
 cpp_common = { path = "../cpp_common", version = "=0.4.0" }
-cpp_synmap = { path = "../cpp_synmap", version = "0.3.0" }
-cpp_syn = { version = "0.12", features=["full", "visit"] }
-cpp_synom = { version = "0.12" }
+syn = { version = "0.15", features=["full", "visit"] }
+proc-macro2 = "0.4"
+regex = "1"
+unicode-xid = "0.1"

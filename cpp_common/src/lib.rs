@@ -1,21 +1,19 @@
 #[macro_use]
-extern crate cpp_syn as syn;
-
-#[macro_use]
-extern crate cpp_synom as synom;
-
-#[macro_use]
-extern crate quote;
+extern crate syn;
+extern crate proc_macro2;
 
 #[macro_use]
 extern crate lazy_static;
 
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::env;
 
-use syn::{Ident, MetaItem, Spanned, Ty};
+use proc_macro2::{Span, TokenStream, TokenTree};
+use syn::ext::IdentExt;
+use syn::parse::{Parse, ParseStream, Result};
+use syn::{Attribute, Ident, Type};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -23,11 +21,16 @@ pub const LIB_NAME: &'static str = "librust_cpp_generated.a";
 pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
 
 pub mod flags {
-    pub const IS_COPY_CONSTRUCTIBLE : u32 = 0;
-    pub const IS_DEFAULT_CONSTRUCTIBLE : u32 = 1;
-    pub const IS_TRIVIALLY_DESTRUCTIBLE : u32 = 2;
-    pub const IS_TRIVIALLY_COPYABLE : u32 = 3;
-    pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE : u32 = 4;
+    pub const IS_COPY_CONSTRUCTIBLE: u32 = 0;
+    pub const IS_DEFAULT_CONSTRUCTIBLE: u32 = 1;
+    pub const IS_TRIVIALLY_DESTRUCTIBLE: u32 = 2;
+    pub const IS_TRIVIALLY_COPYABLE: u32 = 3;
+    pub const IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE: u32 = 4;
+}
+
+pub mod kw {
+    #![allow(non_camel_case_types)]
+    custom_keyword!(rust);
 }
 
 /// This constant is expected to be a unique string within the compiled binary
@@ -51,13 +54,13 @@ pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
 ];
 
 lazy_static! {
-    pub static ref OUT_DIR: PathBuf =
-        PathBuf::from(env::var("OUT_DIR").expect(r#"
+    pub static ref OUT_DIR: PathBuf = PathBuf::from(env::var("OUT_DIR").expect(
+        r#"
 -- rust-cpp fatal error --
 
 The OUT_DIR environment variable was not set.
-NOTE: rustc must be run by Cargo."#));
-
+NOTE: rustc must be run by Cargo."#
+    ));
     pub static ref FILE_HASH: u64 = {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         OUT_DIR.hash(&mut hasher);
@@ -72,10 +75,25 @@ pub struct Capture {
     pub cpp: String,
 }
 
+impl Parse for Capture {
+    /// Parse a single captured variable inside within a cpp! macro.
+    /// Example: `mut foo as "int"`
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Capture {
+            mutable: input.parse::<Option<Token![mut]>>()?.is_some(),
+            name: input.call(Ident::parse_any)?,
+            cpp: {
+                input.parse::<Token![as]>()?;
+                input.parse::<syn::LitStr>()?.value()
+            },
+        })
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ClosureSig {
     pub captures: Vec<Capture>,
-    pub ret: Ty,
+    pub ret: Option<Type>,
     pub cpp: String,
     pub std_body: String,
 }
@@ -89,23 +107,74 @@ impl ClosureSig {
     }
 
     pub fn extern_name(&self) -> Ident {
-        format!("__cpp_closure_{}", self.name_hash()).into()
+        Ident::new(
+            &format!("__cpp_closure_{}", self.name_hash()),
+            Span::call_site(),
+        )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Closure {
     pub sig: ClosureSig,
-    pub body: Spanned<String>,
+    pub body: TokenTree,
+    pub body_str: String, // with rust! macro replaced
     pub callback_offset: u32,
+}
+
+impl Parse for Closure {
+    /// Parse the inside of a cpp! macro when this macro is a closure.
+    /// Example: `unsafe [foo as "int"] -> u32 as "int" { /*... */ }
+    fn parse(input: ParseStream) -> Result<Self> {
+        input.parse::<Option<Token![unsafe]>>()?;
+
+        // Capture
+        let capture_content;
+        bracketed!(capture_content in input);
+        let captures = syn::punctuated::Punctuated::<Capture, Token![,]>::parse_terminated(
+            &capture_content,
+        )?.into_iter()
+            .collect();
+
+        // Optional return type
+        let (ret, cpp) = if input.peek(Token![->]) {
+            input.parse::<Token![->]>()?;
+            let t: syn::Type = input.parse()?;
+            input.parse::<Token![as]>()?;
+            let s = input.parse::<syn::LitStr>()?.value();
+            (Some(t), s)
+        } else {
+            (None, "void".to_owned())
+        };
+
+        let body = input.parse::<TokenTree>()?;
+        // Need to filter the spaces because there is a difference between
+        // proc_macro2 and proc_macro and the hashes would not match
+        let std_body = body
+            .to_string()
+            .chars()
+            .filter(|x| !x.is_whitespace())
+            .collect();
+
+        Ok(Closure {
+            sig: ClosureSig {
+                captures,
+                ret,
+                cpp,
+                std_body,
+            },
+            body,
+            body_str: String::new(),
+            callback_offset: 0,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Class {
     pub name: Ident,
     pub cpp: String,
-    pub public: bool,
-    pub attrs: Vec<MetaItem>,
+    pub attrs: Vec<Attribute>,
     pub line: String, // the #line directive
 }
 
@@ -114,243 +183,115 @@ impl Class {
         let mut hasher = DefaultHasher::new();
         self.name.hash(&mut hasher);
         self.cpp.hash(&mut hasher);
-        self.public.hash(&mut hasher);
         hasher.finish()
     }
 
     pub fn derives(&self, i: &str) -> bool {
         self.attrs.iter().any(|x| {
-            if let MetaItem::List(ref n, ref list) = x {
-                n.as_ref() == "derive" && list.iter().any(|y| {
-                    if let syn::NestedMetaItem::MetaItem(MetaItem::Word(ref d)) = y {
-                        d.as_ref() == i
-                    } else {
-                        false
-                    }
-                })
-            } else {
-                false
-            }
+            use syn::{Meta, NestedMeta};
+            x.interpret_meta().map_or(false, |m| {
+                if let Meta::List(ref list) = m {
+                    list.ident == "derive" && list.nested.iter().any(|y| {
+                        if let NestedMeta::Meta(Meta::Word(ref d)) = y {
+                            d == i
+                        } else {
+                            false
+                        }
+                    })
+                } else {
+                    false
+                }
+            })
         })
     }
 }
 
+impl Parse for Class {
+    /// Parse the inside of a cpp_class! macro.
+    /// Example: `#[derive(Default)] pub unsafe struct Foobar as "FooBar"`
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Class {
+            attrs: input.call(Attribute::parse_outer)?,
+            name: {
+                input.parse::<syn::Visibility>()?;
+                input.parse::<Token![unsafe]>()?;
+                input.parse::<Token![struct]>()?;
+                input.parse()?
+            },
+            cpp: {
+                input.parse::<Token![as]>()?;
+                input.parse::<syn::LitStr>()?.value()
+            },
+            line: String::new(),
+        })
+    }
+}
+
+#[derive(Debug)]
 pub enum Macro {
     Closure(Closure),
-    Lit(Spanned<String>),
+    Lit(TokenStream),
 }
 
+impl Parse for Macro {
+    ///! Parse the inside of a cpp! macro (a literal or a closure)
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(syn::token::Brace) {
+            let content;
+            braced!(content in input);
+            return Ok(Macro::Lit(content.parse()?));
+        }
+        Ok(Macro::Closure(input.parse::<Closure>()?))
+    }
+}
+
+#[derive(Debug)]
 pub struct RustInvocation {
-    pub begin: usize,
-    pub end: usize,
+    pub begin: Span,
+    pub end: Span,
     pub id: Ident,
     pub return_type: Option<String>,
-    pub arguments: Vec<(String, String)>, // Vec of name and type
+    pub arguments: Vec<(Ident, String)>, // Vec of name and type
 }
 
-pub mod parsing {
-    use super::{Capture, Class, Closure, ClosureSig, Macro, RustInvocation};
-    use syn::parse::{ident, lit, string, tt, ty};
-    use syn::{Ident, MetaItem, NestedMetaItem, Spanned, Ty, DUMMY_SPAN};
-    use synom::space::{block_comment, whitespace};
-
-    macro_rules! mac_body {
-        ($i: expr, $submac:ident!( $($args:tt)* )) => {
-            delimited!(
-                $i,
-                alt!(punct!("[") | punct!("(") | punct!("{")),
-                $submac!($($args)*),
-                alt!(punct!("]") | punct!(")") | punct!("}"))
-            )
+impl Parse for RustInvocation {
+    /// Parse a rust! macro something looking like `rust!(ident [foo : bar as "bar"] { /*...*/ })`
+    fn parse(input: ParseStream) -> Result<Self> {
+        let rust_token = input.parse::<kw::rust>()?;
+        input.parse::<Token![!]>()?;
+        let macro_content;
+        let p = parenthesized!(macro_content in input);
+        let r = RustInvocation {
+            begin: rust_token.span,
+            end: p.span,
+            id: macro_content.parse()?,
+            arguments: {
+                let capture_content;
+                bracketed!(capture_content in macro_content);
+                capture_content
+                    .parse_terminated::<(Ident, String), Token![,]>(
+                        |input: ParseStream| -> Result<(Ident, String)> {
+                            let i = input.call(Ident::parse_any)?;
+                            input.parse::<Token![:]>()?;
+                            input.parse::<Type>()?;
+                            input.parse::<Token![as]>()?;
+                            let s = input.parse::<syn::LitStr>()?.value();
+                            Ok((i, s))
+                        },
+                    )?
+                    .into_iter()
+                    .collect()
+            },
+            return_type: if macro_content.peek(Token![->]) {
+                macro_content.parse::<Token![->]>()?;
+                macro_content.parse::<Type>()?;
+                macro_content.parse::<Token![as]>()?;
+                Some(macro_content.parse::<syn::LitStr>()?.value())
+            } else {
+                None
+            },
         };
-        ($i:expr, $e:expr) => {
-            mac_body!($i, call!($e))
-        };
+        macro_content.parse::<TokenTree>()?;
+        Ok(r)
     }
-
-    named!(ident_or_self -> Ident, alt!( ident | keyword!("self") => { |_| "self".into() } ));
-
-    named!(name_as_string -> Capture,
-           do_parse!(
-               is_mut: option!(keyword!("mut")) >>
-                   id: ident_or_self >>
-                   keyword!("as") >>
-                   cty: string >>
-                   (Capture {
-                       mutable: is_mut.is_some(),
-                       name: id,
-                       cpp: cty.value
-                   })
-           ));
-
-    named!(captures -> Vec<Capture>,
-           delimited!(
-               punct!("["),
-               terminated_list!(
-                   punct!(","),
-                   name_as_string
-               ),
-               punct!("]")));
-
-    named!(ret_ty -> (Ty, String),
-           alt!(
-               do_parse!(punct!("->") >>
-                         rty: ty >>
-                         keyword!("as") >>
-                         cty: string >>
-                         ((rty, cty.value))) |
-               value!((Ty::Tup(Vec::new()), "void".to_owned()))
-           ));
-
-    named!(code_block -> Spanned<String>,
-           alt!(
-               do_parse!(s: string >> (Spanned {
-                   node: s.value,
-                   span: DUMMY_SPAN,
-               })) |
-               // XXX: This is really inefficient and means that things like ++y
-               // will parse incorrectly (as we care about the layout of the
-               // original source) so consider this a temporary monkey patch.
-               // Once we get spans we can work past it.
-               delimited!(punct!("{"), spanned!(many0!(tt)), punct!("}")) => {
-                   |Spanned{ node, span }| Spanned {
-                       node: quote!(#(#node)*).to_string(),
-                       span: span
-                   }
-               }
-           ));
-
-    named!(pub cpp_closure -> Closure,
-           do_parse!(option!(keyword!("unsafe")) >>
-                     captures: captures >>
-                     ret: ret_ty >>
-                     code: code_block >>
-                     (Closure {
-                         sig: ClosureSig {
-                             captures: captures,
-                             ret: ret.0,
-                             cpp: ret.1,
-                             std_body: code.node.clone(),
-                         },
-                         body: code,
-                         callback_offset: 0
-                     })));
-
-    named!(pub build_macro -> Macro , mac_body!(alt!(
-        cpp_closure => { |c| Macro::Closure(c) } |
-        code_block => { |b| Macro::Lit(b) }
-    )));
-
-    named!(pub expand_macro -> Closure, mac_body!(
-        map!(tuple!(
-            punct!("@"), keyword!("TYPE"), cpp_closure
-        ), (|(_, _, x)| x))));
-
-    //FIXME: make cpp_syn::attr::parsing::outer_attr  public
-    // This is just a trimmed down version of it
-    named!(pub outer_attr -> MetaItem, alt!(
-        do_parse!(
-            punct!("#") >>
-            punct!("[") >>
-            attr: meta_item >>
-            punct!("]") >>
-            (attr)
-        ) | do_parse!(
-            punct!("///") >>
-            not!(tag!("/")) >>
-            content: spanned!(take_until!("\n")) >>
-            (MetaItem::NameValue("doc".into(), content.node.into()))
-        ) | do_parse!(
-            option!(whitespace) >>
-            peek!(tuple!(tag!("/**"), not!(tag!("*")))) >>
-            com: block_comment >>
-            (MetaItem::NameValue("doc".into(), com[3..com.len()-2].into()))
-        )
-    ));
-
-    named!(meta_item -> MetaItem, alt!(
-        do_parse!(
-            id: ident >>
-            punct!("(") >>
-            inner: terminated_list!(punct!(","), nested_meta_item) >>
-            punct!(")") >>
-            (MetaItem::List(id, inner))
-        )
-        |
-        do_parse!(
-            name: ident >>
-            punct!("=") >>
-            value: lit >>
-            (MetaItem::NameValue(name, value))
-        )
-        |
-        map!(ident, MetaItem::Word)
-    ));
-    named!(nested_meta_item -> NestedMetaItem, alt!(
-        meta_item => { NestedMetaItem::MetaItem }
-        |
-        lit => { NestedMetaItem::Literal }
-    ));
-
-    named!(pub cpp_class -> Class,
-           do_parse!(
-            attrs: many0!(outer_attr) >>
-            is_pub: option!(tuple!(
-                keyword!("pub"),
-                option!(delimited!(punct!("("), many0!(tt), punct!(")"))))) >>
-            keyword!("unsafe") >>
-            keyword!("struct") >>
-            name: ident >>
-            keyword!("as") >>
-            cpp_type: string >>
-            (Class {
-                name: name,
-                cpp: cpp_type.value,
-                public: is_pub.is_some(),
-                attrs: attrs,
-                line: String::default(),
-            })));
-
-    named!(pub class_macro -> Class , mac_body!(cpp_class));
-
-    named!(rust_macro_argument -> (String, String),
-        do_parse!(
-            name: ident >>
-            punct!(":") >>
-            ty >>
-            keyword!("as") >>
-            cty: string >>
-            ((name.as_ref().to_owned(), cty.value))));
-
-    named!(pub find_rust_macro -> RustInvocation,
-        do_parse!(
-            alt!(take_until!("rust!") | take_until!("rust !")) >>
-            begin: spanned!(keyword!("rust")) >>
-            punct!("!") >>
-            punct!("(") >>
-            id: ident >>
-            punct!("[") >>
-            args: separated_list!(punct!(","), rust_macro_argument) >>
-            punct!("]") >>
-            rty : option!(do_parse!(punct!("->") >>
-                    ty >>
-                    keyword!("as") >>
-                    cty: string >>
-                    (cty.value))) >>
-            tt >>
-            end: spanned!(punct!(")")) >>
-            (RustInvocation{
-                begin: begin.span.lo,
-                end: end.span.hi,
-                id: id,
-                return_type: rty,
-                arguments: args
-            })));
-
-    named!(pub find_all_rust_macro -> Vec<RustInvocation>,
-        do_parse!(
-            r : many0!(find_rust_macro) >>
-            many0!(alt!( tt => {|_| ""} | punct!("]") | punct!(")") | punct!("}")))
-            >> (r)));
-
 }

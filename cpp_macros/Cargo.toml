@@ -16,8 +16,8 @@ proc-macro = true
 [dependencies]
 lazy_static = "1.0"
 cpp_common = { path = "../cpp_common", version = "=0.4.0" }
-cpp_synom = { version = "0.12" }
-cpp_syn = { version = "0.12", features=["full", "visit"] }
-quote = "0.3"
+syn = { version = "0.15", features=["full", "visit"] }
+quote = "0.6"
+proc-macro2 = "0.4"
 aho-corasick = "0.6"
 byteorder = "1.0"

@@ -5,9 +5,8 @@
 //! documentation](https://docs.rs/cpp).
 #![recursion_limit = "128"]
 
-extern crate cpp_synom as synom;
-
-extern crate cpp_syn as syn;
+#[macro_use]
+extern crate syn;
 
 #[macro_use]
 extern crate quote;
@@ -15,6 +14,8 @@ extern crate quote;
 extern crate cpp_common;
 
 extern crate proc_macro;
+extern crate proc_macro2;
+use proc_macro2::Span;
 
 #[macro_use]
 extern crate lazy_static;
@@ -23,37 +24,40 @@ extern crate aho_corasick;
 
 extern crate byteorder;
 
+use cpp_common::{flags, kw, RustInvocation, FILE_HASH, LIB_NAME, MSVC_LIB_NAME, OUT_DIR, VERSION};
 use std::collections::HashMap;
-use proc_macro::TokenStream;
-use cpp_common::{parsing, LIB_NAME, MSVC_LIB_NAME, VERSION, OUT_DIR, FILE_HASH, flags};
+use std::iter::FromIterator;
+use syn::parse::Parser;
 use syn::Ident;
 
-use std::io::{self, BufReader, Read, Seek, SeekFrom};
-use std::fs::File;
 use aho_corasick::{AcAutomaton, Automaton};
 use byteorder::{LittleEndian, ReadBytesExt};
+use std::fs::File;
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 
 struct MetaData {
     size: usize,
     align: usize,
-    flags: u64
+    flags: u64,
 }
 impl MetaData {
-    fn has_flag(&self, f : u32) -> bool {
+    fn has_flag(&self, f: u32) -> bool {
         self.flags & (1 << f) != 0
     }
 }
 
 lazy_static! {
     static ref METADATA: HashMap<u64, Vec<MetaData>> = {
-        let file = open_lib_file().expect(r#"
+        let file = open_lib_file().expect(
+            r#"
 -- rust-cpp fatal error --
 
 Failed to open the target library file.
-NOTE: Did you make sure to add the rust-cpp build script?"#);
+NOTE: Did you make sure to add the rust-cpp build script?"#,
+        );
 
-        read_metadata(file)
-            .expect(r#"
+        read_metadata(file).expect(
+            r#"
 -- rust-cpp fatal error --
 
 I/O error while reading metadata from target library file."#,
@@ -89,8 +93,7 @@ NOTE: Double-check that the version of cpp_build and cpp_macros match"#,
         .collect::<String>();
 
     assert_eq!(
-        version,
-        VERSION,
+        version, VERSION,
         r#"
 -- rust-cpp fatal error --
 
@@ -108,7 +111,7 @@ Version mismatch between cpp_macros and cpp_build for same crate."#
         metadata
             .entry(hash)
             .or_insert(Vec::new())
-            .push(MetaData{size, align, flags});
+            .push(MetaData { size, align, flags });
     }
     Ok(metadata)
 }
@@ -124,48 +127,52 @@ fn open_lib_file() -> io::Result<File> {
     }
 }
 
-/// Strip tokens from the prefix and suffix of the source string, extracting the
-/// original argument to the cpp! macro.
-fn macro_text(mut source: &str) -> &str {
-    #[cfg_attr(rustfmt, rustfmt_skip)]
-    const PREFIX: &'static [&'static str] = &[
-        "#", "[", "allow", "(", "unused", ")", "]",
-        "enum", "CppClosureInput", "{",
-        "Input", "=", "(", "stringify", "!", "("
-    ];
-
-    #[cfg_attr(rustfmt, rustfmt_skip)]
-    const SUFFIX: &'static [&'static str] = &[
-        ")", ",", "0", ")", ".", "1", ",", "}"
-    ];
-
-    source = source.trim();
-
-    for token in PREFIX {
-        assert!(
-            source.starts_with(token),
-            "expected prefix token {}, got {}",
-            token,
-            source
-        );
-        source = &source[token.len()..].trim();
+fn find_all_rust_macro(
+    input: syn::parse::ParseStream,
+) -> Result<Vec<RustInvocation>, syn::parse::Error> {
+    let mut r = Vec::<RustInvocation>::new();
+    while !input.is_empty() {
+        if input.peek(kw::rust) {
+            if let Ok(ri) = input.parse::<RustInvocation>() {
+                r.push(ri);
+            }
+        } else if input.peek(syn::token::Brace) {
+            let c;
+            braced!(c in input);
+            r.extend(find_all_rust_macro(&c)?);
+        } else if input.peek(syn::token::Paren) {
+            let c;
+            parenthesized!(c in input);
+            r.extend(find_all_rust_macro(&c)?);
+        } else if input.peek(syn::token::Bracket) {
+            let c;
+            bracketed!(c in input);
+            r.extend(find_all_rust_macro(&c)?);
+        } else {
+            input.parse::<proc_macro2::TokenTree>()?;
+        }
     }
+    return Ok(r);
+}
 
-    for token in SUFFIX.iter().rev() {
-        assert!(
-            source.ends_with(token),
-            "expected suffix token {}, got {}",
-            token,
-            source
-        );
-        source = &source[..source.len() - token.len()].trim();
+/// Find the occurence of the strignify! macro within the macro derive
+fn extract_original_macro(input: &syn::DeriveInput) -> Option<proc_macro2::TokenStream> {
+    #[derive(Default)]
+    struct Finder(Option<proc_macro2::TokenStream>);
+    impl<'ast> syn::visit::Visit<'ast> for Finder {
+        fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+            if mac.path.segments.len() == 1 && mac.path.segments[0].ident == "stringify" {
+                self.0 = Some(mac.tts.clone());
+            }
+        }
     }
-
-    source
+    let mut f = Finder::default();
+    syn::visit::visit_derive_input(&mut f, &input);
+    f.0
 }
 
 #[proc_macro_derive(__cpp_internal_closure)]
-pub fn expand_internal(input: TokenStream) -> TokenStream {
+pub fn expand_internal(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     assert_eq!(
         env!("CARGO_PKG_VERSION"),
         VERSION,
@@ -173,28 +180,33 @@ pub fn expand_internal(input: TokenStream) -> TokenStream {
     );
 
     // Parse the macro input
-    let source = input.to_string();
-    let tokens = macro_text(&source);
+    let input = extract_original_macro(&parse_macro_input!(input as syn::DeriveInput)).unwrap();
 
-    let closure = parsing::cpp_closure(synom::ParseState::new(tokens)).expect("cpp! macro");
+    let closure = match syn::parse2::<cpp_common::Closure>(input) {
+        Ok(x) => x,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     // Get the size data compiled by the build macro
-    let size_data = METADATA.get(&closure.sig.name_hash()).expect(
-        r#"
--- rust-cpp fatal error --
-
-This cpp! macro is not found in the library's rust-cpp metadata.
+    let size_data = match METADATA.get(&closure.sig.name_hash()) {
+        Some(x) => x,
+        None => {
+            return quote!(compile_error!{
+r#"This cpp! macro is not found in the library's rust-cpp metadata.
 NOTE: Only cpp! macros found directly in the program source will be parsed -
-NOTE: They cannot be generated by macro expansion."#,
-    );
+NOTE: They cannot be generated by macro expansion."#})
+                .into()
+        }
+    };
 
     let mut extern_params = Vec::new();
     let mut tt_args = Vec::new();
     let mut call_args = Vec::new();
     for (i, capture) in closure.sig.captures.iter().enumerate() {
         let written_name = &capture.name;
-        let mac_name: Ident = format!("$var_{}", written_name).into();
-        let mac_cty: Ident = format!("$cty_{}", written_name).into();
+        let span = written_name.span();
+        let mac_name = Ident::new(&format!("var_{}", written_name), span);
+        let mac_cty = Ident::new(&format!("cty_{}", written_name), span);
 
         // Generate the assertion to check that the size and align of the types
         // match before calling.
@@ -209,40 +221,40 @@ NOTE: They cannot be generated by macro expansion."#,
              rust",
             &capture.name
         );
-        let assertion = quote!{
+        let assertion = quote_spanned!{span=>
             // Perform a compile time check that the sizes match. This should be
             // a no-op.
             ::std::mem::forget(
                 ::std::mem::transmute::<_, [u8; #size]>(
-                    ::std::ptr::read(&#mac_name)));
+                    ::std::ptr::read(&$#mac_name)));
 
             // NOTE: Both of these calls should be dead code in opt builds.
-            assert!(::std::mem::size_of_val(&#mac_name) == #size,
+            assert!(::std::mem::size_of_val(&$#mac_name) == #size,
                     #sizeof_msg);
-            assert!(::std::mem::align_of_val(&#mac_name) == #align,
+            assert!(::std::mem::align_of_val(&$#mac_name) == #align,
                     #alignof_msg);
         };
 
         let mb_mut = if capture.mutable {
-            quote!(mut)
+            quote_spanned!(span=> mut)
         } else {
             quote!()
         };
         let ptr = if capture.mutable {
-            quote!(*mut)
+            quote_spanned!(span=> *mut)
         } else {
-            quote!(*const)
+            quote_spanned!(span=> *const)
         };
 
-        let arg_name : Ident = format!("arg_{}", written_name).into();
+        let arg_name = Ident::new(&format!("arg_{}", written_name), span);
 
-        extern_params.push(quote!(#arg_name : #ptr u8));
+        extern_params.push(quote_spanned!(span=> #arg_name : #ptr u8));
 
-        tt_args.push(quote!(#mb_mut #mac_name : ident as #mac_cty : tt));
+        tt_args.push(quote_spanned!(span=> #mb_mut $#mac_name : ident as $#mac_cty : tt));
 
-        call_args.push(quote!({
+        call_args.push(quote_spanned!(span=> {
             #assertion
-            &#mb_mut #mac_name as #ptr _ as #ptr u8
+            &#mb_mut $#mac_name as #ptr _ as #ptr u8
         }));
     }
 
@@ -269,20 +281,23 @@ NOTE: They cannot be generated by macro expansion."#,
         assert!(ret_size == 0, "`void` should have a size of 0!");
         quote! {
             #extern_name(#(#call_args),*);
-            ::std::mem::transmute::<(), #ret_ty>(())
+            ::std::mem::transmute::<(), (#ret_ty)>(())
         }
     } else {
-        quote! {
+        quote!{
             let mut result: #ret_ty = ::std::mem::uninitialized();
             #extern_name(#(#call_args,)* &mut result);
             result
         }
     };
 
-    let rust_invocations = parsing::find_all_rust_macro(synom::ParseState::new(&closure.body.node))
-        .expect("rust! macro");
+    let input = proc_macro2::TokenStream::from_iter([closure.body].iter().map(|x| x.clone()));
+    let rust_invocations = find_all_rust_macro.parse2(input).expect("rust! macro");
     let init_callbacks = if !rust_invocations.is_empty() {
-        let rust_cpp_callbacks: Ident = format!("rust_cpp_callbacks{}", *FILE_HASH).into();
+        let rust_cpp_callbacks = Ident::new(
+            &format!("rust_cpp_callbacks{}", *FILE_HASH),
+            Span::call_site(),
+        );
         let offset = (flags >> 32) as isize;
         let callbacks: Vec<Ident> = rust_invocations.iter().map(|x| x.id.clone()).collect();
         quote! {
@@ -320,11 +335,11 @@ NOTE: They cannot be generated by macro expansion."#,
                     // Perform a compile time check that the sizes match.
                     ::std::mem::forget(
                         ::std::mem::transmute::<_, [u8; #ret_size]>(
-                            ::std::mem::uninitialized::<#ret_ty>()));
+                            ::std::mem::uninitialized::<(#ret_ty)>()));
 
                     // Perform a runtime check that the sizes match.
-                    assert!(::std::mem::size_of::<#ret_ty>() == #ret_size);
-                    assert!(::std::mem::align_of::<#ret_ty>() == #ret_align);
+                    assert!(::std::mem::size_of::<(#ret_ty)>() == #ret_size);
+                    assert!(::std::mem::align_of::<(#ret_ty)>() == #ret_align);
 
                     #call
                 }
@@ -332,58 +347,46 @@ NOTE: They cannot be generated by macro expansion."#,
         }
     };
 
-    result.to_string().parse().unwrap()
+    result.into()
 }
 
 #[proc_macro_derive(__cpp_internal_class)]
-pub fn expand_wrap_class(input: TokenStream) -> TokenStream {
-    let source = input.to_string();
+pub fn expand_wrap_class(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    // Parse the macro input
+    let input = extract_original_macro(&parse_macro_input!(input as syn::DeriveInput)).unwrap();
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
-    const SUFFIX: &'static [&'static str] = &[
-        ")", ",", "0", ")", ".", "1", "]", ",", "}"
-    ];
-
-    let s = source.find("stringify!(").expect("expected 'strignify!' token in class content") + 11;
-    let mut tokens : &str = &source[s..].trim();
-
-    for token in SUFFIX.iter().rev() {
-        assert!(
-            tokens.ends_with(token),
-            "expected suffix token {}, got {}",
-            token,
-            tokens
-        );
-        tokens = &tokens[..tokens.len() - token.len()].trim();
-    }
-
-    let class = parsing::cpp_class(synom::ParseState::new(tokens))
-        .expect("cpp_class! macro");
+    let class = match ::syn::parse2::<cpp_common::Class>(input) {
+        Ok(x) => x,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     let hash = class.name_hash();
 
-    let size_data = METADATA.get(&hash).expect(
-        r#"
--- rust-cpp fatal error --
-
-This cpp_class! macro is not found in the library's rust-cpp metadata.
+    // Get the size data compiled by the build macro
+    let size_data = match METADATA.get(&hash) {
+        Some(x) => x,
+        None => {
+            return quote!(compile_error!{
+r#"This cpp_class! macro is not found in the library's rust-cpp metadata.
 NOTE: Only cpp_class! macros found directly in the program source will be parsed -
-NOTE: They cannot be generated by macro expansion."#,
-    );
+NOTE: They cannot be generated by macro expansion."#})
+                .into()
+        }
+    };
 
     let (size, align) = (size_data[0].size, size_data[0].align);
 
     let base_type = match align {
-        1 => { quote!(u8) }
-        2 => { quote!(u16) }
-        4 => { quote!(u32) }
-        8 => { quote!(u64) }
-        _ => { panic!("unsupported alignment") }
+        1 => quote!(u8),
+        2 => quote!(u16),
+        4 => quote!(u32),
+        8 => quote!(u64),
+        _ => panic!("unsupported alignment"),
     };
 
-    let destructor_name : Ident = format!("__cpp_destructor_{}", hash).into();
-    let copyctr_name : Ident = format!("__cpp_copy_{}", hash).into();
-    let defaultctr_name : Ident = format!("__cpp_default_{}", hash).into();
+    let destructor_name = Ident::new(&format!("__cpp_destructor_{}", hash), Span::call_site());
+    let copyctr_name = Ident::new(&format!("__cpp_copy_{}", hash), Span::call_site());
+    let defaultctr_name = Ident::new(&format!("__cpp_default_{}", hash), Span::call_site());
     let class_name = class.name.clone();
 
     let mut result = quote! {
@@ -450,7 +453,7 @@ NOTE: They cannot be generated by macro expansion."#,
     }
 
     if class.derives("PartialEq") {
-        let equal_name: Ident = format!("__cpp_equal_{}", hash).into();
+        let equal_name = Ident::new(&format!("__cpp_equal_{}", hash), Span::call_site());
         result = quote!{ #result
             impl ::std::cmp::PartialEq for #class_name {
                 fn eq(&self, other: &#class_name) -> bool {
@@ -463,7 +466,7 @@ NOTE: They cannot be generated by macro expansion."#,
         };
     }
     if class.derives("PartialOrd") {
-        let compare_name: Ident = format!("__cpp_compare_{}", hash).into();
+        let compare_name = Ident::new(&format!("__cpp_compare_{}", hash), Span::call_site());
         let f = |func, cmp| {
             quote!{
                 fn #func(&self, other: &#class_name) -> bool {
@@ -498,7 +501,7 @@ NOTE: They cannot be generated by macro expansion."#,
         };
     }
     if class.derives("Ord") {
-        let compare_name: Ident = format!("__cpp_compare_{}", hash).into();
+        let compare_name = Ident::new(&format!("__cpp_compare_{}", hash), Span::call_site());
         result = quote!{ #result
             impl ::std::cmp::Ord for #class_name {
                 fn cmp(&self, other: &#class_name) -> ::std::cmp::Ordering {
@@ -524,5 +527,5 @@ NOTE: They cannot be generated by macro expansion."#,
         panic!("Deriving from Debug is not implemented")
     };
 
-    result.to_string().parse().unwrap()
+    result.into()
 }

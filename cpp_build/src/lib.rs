@@ -4,26 +4,26 @@
 //! For more information, see the [`cpp` crate module level
 //! documentation](https://docs.rs/cpp).
 
-extern crate cpp_common;
-extern crate cpp_synom as synom;
-extern crate cpp_syn as syn;
-
-extern crate cpp_synmap;
-
 extern crate cc;
+extern crate cpp_common;
+extern crate proc_macro2;
+extern crate regex;
+extern crate syn;
+extern crate unicode_xid;
 
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+mod strnom;
+
+use cpp_common::*;
 use std::env;
-use std::path::{Path, PathBuf};
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
-use syn::visit::Visitor;
-use syn::{Mac, Spanned, DUMMY_SPAN, Ident, Token, TokenTree};
-use cpp_common::{parsing, Capture, Closure, ClosureSig, Macro, Class, LIB_NAME, STRUCT_METADATA_MAGIC,
-                 VERSION, OUT_DIR, FILE_HASH, flags};
-use cpp_synmap::SourceMap;
+use std::path::{Path, PathBuf};
+
+mod parser;
 
 fn warnln_impl(a: String) {
     for s in a.lines() {
@@ -41,8 +41,8 @@ macro_rules! warnln {
 // Note: if the this macro is itself in a macro, it should be on on the same line of the macro
 macro_rules! add_line {
     ($e:expr) => {
-        concat!("#line ", line!() , " \"", file!(), "\"\n", $e)
-    }
+        concat!("#line ", line!(), " \"", file!(), "\"\n", $e)
+    };
 }
 
 const INTERNAL_CPP_STRUCTS: &'static str = add_line!(r#"
@@ -128,97 +128,44 @@ template<typename T> int compare_helper(const T &a, const T&b, int cmp) {
 
 lazy_static! {
     static ref CPP_DIR: PathBuf = OUT_DIR.join("rust_cpp");
-
-    static ref CARGO_MANIFEST_DIR: PathBuf =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(r#"
+    static ref CARGO_MANIFEST_DIR: PathBuf = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(
+        r#"
 -- rust-cpp fatal error --
 
 The CARGO_MANIFEST_DIR environment variable was not set.
-NOTE: rust-cpp's build function must be run in a build script."#));
+NOTE: rust-cpp's build function must be run in a build script."#
+    ));
 }
 
-enum ExpandSubMacroType<'a> {
-    Lit,
-    Closure(&'a mut u32), // the offset
-}
-
-// Given a string containing some C++ code with a rust! macro,
-// this functions expand the rust! macro to a call to an extern
-// function
-fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> String {
-    let mut result = input;
-    let mut extra_decl = String::new();
-    loop {
-        let tmp = result.clone();
-        if let synom::IResult::Done(_, rust_invocation) =
-            parsing::find_rust_macro(synom::ParseState::new(&tmp))
-        {
-            let fn_name: Ident = match t {
-                ExpandSubMacroType::Lit => {
-                    extra_decl.push_str(&format!("extern \"C\" void {}();\n", rust_invocation.id));
-                    rust_invocation.id.clone()
-                }
-                ExpandSubMacroType::Closure(ref mut offset) => {
-                    **offset += 1;
-                    format!("rust_cpp_callbacks{file_hash}[{offset}]",
-                        file_hash = *FILE_HASH, offset = **offset - 1).into()
-                }
-            };
-
-            let mut decl_types = rust_invocation.arguments.iter().map(|&(_, ref val)| {
-                    format!("rustcpp::argument_helper<{}>::type", val)
-                }).collect::<Vec<_>>();
-            let mut call_args = rust_invocation.arguments.iter().map(|&(ref val, _)| val.as_ref()).collect::<Vec<_>>();
-
-            let fn_call = match rust_invocation.return_type {
-                None => {
-                    format!("reinterpret_cast<void (*)({types})>({f})({args})",
-                        f = fn_name, types = decl_types.join(", "), args = call_args.join(", "))
-                }
-                Some(rty) => {
-                    decl_types.push(format!("rustcpp::return_helper<{rty}>", rty = rty));
-                    call_args.push("0");
-                    format!("std::move(*reinterpret_cast<{rty}*(*)({types})>({f})({args}))",
-                        rty = rty, f = fn_name, types = decl_types.join(", "), args = call_args.join(", "))
-                }
-            };
-
-            let fn_call = {
-                // remove the rust! macro from the C++ snippet
-                let orig = result.drain(rust_invocation.begin .. rust_invocation.end);
-                // add \ņ to the invocation in order to keep the same amount of line numbers
-                // so errors point to the right line.
-                orig.filter(|x| *x == '\n').fold(fn_call, |mut res, _| {res.push('\n'); res})
-            };
-            // add the invocation of call where the rust! macro used to be.
-            result.insert_str(rust_invocation.begin, &fn_call);
-        } else {
-            break;
-        }
-    }
-
-    return extra_decl + &result;
-}
-
-fn gen_cpp_lib(visitor: &Handle) -> PathBuf {
+fn gen_cpp_lib(visitor: &parser::Parser) -> PathBuf {
     let result_path = CPP_DIR.join("cpp_closures.cpp");
     let mut output = File::create(&result_path).expect("Unable to generate temporary C++ file");
 
     write!(output, "{}", INTERNAL_CPP_STRUCTS).unwrap();
 
     if visitor.callbacks_count > 0 {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         write!(output, add_line!(r#"
 extern "C" {{
     void (*rust_cpp_callbacks{file_hash}[{callbacks_count}])() = {{}};
 }}
-        "#), file_hash = *FILE_HASH, callbacks_count = visitor.callbacks_count).unwrap();
+        "#
+            ),
+            file_hash = *FILE_HASH,
+            callbacks_count = visitor.callbacks_count
+        ).unwrap();
     }
-
 
     write!(output, "{}\n\n", &visitor.snippets).unwrap();
 
     let mut sizealign = vec![];
-    for &Closure { ref body, ref sig, ref callback_offset } in &visitor.closures {
+    for &Closure {
+        ref body_str,
+        ref sig,
+        ref callback_offset,
+        ..
+    } in &visitor.closures
+    {
         let &ClosureSig {
             ref captures,
             ref cpp,
@@ -262,34 +209,39 @@ extern "C" {{
                      mutable,
                      ref name,
                      ref cpp,
-                 }| if mutable {
-                    format!("{} & {}", cpp, name)
-                } else {
-                    format!("{} const& {}", cpp, name)
+                 }| {
+                    if mutable {
+                        format!("{} & {}", cpp, name)
+                    } else {
+                        format!("{} const& {}", cpp, name)
+                    }
                 },
             )
             .collect::<Vec<_>>()
             .join(", ");
 
         if is_void {
+            #[cfg_attr(rustfmt, rustfmt_skip)]
             write!(output, add_line!(r#"
 extern "C" {{
 void {name}({params}) {{
 {body}
 }}
 }}
-"#),
+"#
+                ),
                 name = &name,
                 params = params,
-                body = body.node
+                body = body_str
             ).unwrap();
         } else {
             let comma = if params.is_empty() { "" } else { "," };
             let args = captures
                 .iter()
-                .map(|&Capture { ref name, .. }| name.as_ref())
+                .map(|&Capture { ref name, .. }| name.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
+            #[cfg_attr(rustfmt, rustfmt_skip)]
             write!(output, add_line!(r#"
 static inline {ty} {name}_impl({params}) {{
 {body}
@@ -299,13 +251,14 @@ void {name}({params}{comma} void* __result) {{
     ::new(__result) ({ty})({name}_impl({args}));
 }}
 }}
-"#),
+"#
+                ),
                 name = &name,
                 params = params,
                 comma = comma,
                 ty = cpp,
                 args = args,
-                body = body.node
+                body = body_str
             ).unwrap();
         }
     }
@@ -349,6 +302,7 @@ void {name}({params}{comma} void* __result) {{
         magic.push(format!("{}", mag));
     }
 
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     write!(output, add_line!(r#"
 
 namespace rustcpp {{
@@ -454,7 +408,10 @@ impl Config {
     pub fn new() -> Config {
         let mut cc = cc::Build::new();
         cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
-        Config { cc: cc, std_flag_set: false }
+        Config {
+            cc: cc,
+            std_flag_set: false,
+        }
     }
 
     /// Add a directory to the `-I` or include path for headers
@@ -660,35 +617,16 @@ impl Config {
         clean_artifacts();
 
         // Parse the crate
-        let mut sm = SourceMap::new();
-        let krate = match sm.add_crate_root(crate_root) {
-            Ok(krate) => krate,
-            Err(err) => {
-                let mut err_s = err.to_string();
-                if let Some(i) = err_s.find("unparsed tokens after") {
-                    // Strip the long error message from syn
-                    err_s = err_s[0..i].to_owned();
-                }
-                warnln!(
-                    r#"-- rust-cpp parse error --
+        let mut visitor = parser::Parser::default();
+        if let Err(err) = visitor.parse_crate(&crate_root) {
+            warnln!(r#"-- rust-cpp parse error --
 There was an error parsing the crate for the rust-cpp build script:
 {}
 In order to provide a better error message, the build script will exit successfully, such that rustc can provide an error message."#,
-                    err_s
+                    err
                 );
-                return;
-            }
-        };
-
-        // Parse the macro definitions
-        let mut visitor = Handle {
-            closures: Vec::new(),
-            classes: Vec::new(),
-            snippets: String::new(),
-            sm: &sm,
-            callbacks_count: 0,
-        };
-        visitor.visit_crate(&krate);
+            return;
+        }
 
         // Generate the C++ library code
         let filename = gen_cpp_lib(&visitor);
@@ -702,7 +640,6 @@ In order to provide a better error message, the build script will exit successfu
         if !self.std_flag_set {
             self.cc.flag_if_supported("-std=c++11");
         }
-
         // Build the C++ library
         self.cc.file(filename).compile(LIB_NAME);
     }
@@ -712,118 +649,4 @@ In order to provide a better error message, the build script will exit successfu
 /// Intended to be used within `build.rs` files.
 pub fn build<P: AsRef<Path>>(path: P) {
     Config::new().build(path)
-}
-
-struct Handle<'a> {
-    closures: Vec<Closure>,
-    classes: Vec<Class>,
-    snippets: String,
-    sm: &'a SourceMap,
-    callbacks_count: u32,
-}
-
-fn line_directive(span: syn::Span, sm: &SourceMap) -> String {
-        let loc = sm.locinfo(span).unwrap();
-        let mut line = format!("#line {} {:?}\n", loc.line, loc.path);
-        for _ in 0..loc.col {
-            line.push(' ');
-        }
-        return line;
-}
-
-fn extract_with_span(spanned: &mut Spanned<String>, src: &str, offset: usize, sm: &SourceMap) {
-    if spanned.span != DUMMY_SPAN {
-        let src_slice = &src[spanned.span.lo..spanned.span.hi];
-        spanned.span.lo += offset;
-        spanned.span.hi += offset;
-        spanned.node = line_directive(spanned.span, sm);
-        spanned.node.push_str(src_slice);
-    }
-}
-
-impl<'a> Visitor for Handle<'a> {
-    fn visit_mac(&mut self, mac: &Mac) {
-        if mac.path.segments.len() != 1 {
-            return;
-        }
-        if mac.path.segments[0].ident.as_ref() == "cpp" {
-            assert!(mac.tts.len() == 1);
-            self.handle_cpp(&mac.tts[0]);
-        } else if mac.path.segments[0].ident.as_ref() == "cpp_class" {
-            assert!(mac.tts.len() == 1);
-            self.handle_cpp_class(&mac.tts[0]);
-        } else {
-            self.parse_macro(&mac.tts);
-        }
-    }
-}
-
-impl<'a> Handle<'a> {
-    fn handle_cpp(&mut self, tt: &TokenTree) {
-        let span = tt.span();
-        let src = self.sm.source_text(span).unwrap();
-        let input = synom::ParseState::new(&src);
-        match parsing::build_macro(input)
-            .expect(&format!("cpp! macro at {}", self.sm.locinfo(span).unwrap()))
-        {
-            Macro::Closure(mut c) => {
-                extract_with_span(&mut c.body, &src, span.lo, self.sm);
-                c.callback_offset = self.callbacks_count;
-                c.body.node = expand_sub_rust_macro(
-                    c.body.node,
-                    ExpandSubMacroType::Closure(&mut self.callbacks_count),
-                );
-                self.closures.push(c);
-            }
-            Macro::Lit(mut l) => {
-                extract_with_span(&mut l, &src, span.lo, self.sm);
-                self.snippets.push('\n');
-                self.snippets.push_str(&expand_sub_rust_macro(
-                    l.node.clone(),
-                    ExpandSubMacroType::Lit,
-                ));
-            }
-        }
-    }
-
-    fn handle_cpp_class(&mut self, tt: &TokenTree) {
-        let span = tt.span();
-        let src = self.sm.source_text(span).unwrap();
-        let input = synom::ParseState::new(&src);
-        let mut class = parsing::class_macro(input).expect(&format!(
-            "cpp_class! macro at {}",
-            self.sm.locinfo(span).unwrap()
-        ));
-        class.line = line_directive(span, self.sm);
-        self.classes.push(class);
-    }
-
-    fn parse_macro(&mut self, tts: &Vec<TokenTree>) {
-        let mut last_ident: Option<&Ident> = None;
-        let mut is_macro = false;
-        for t in tts {
-            match t {
-                TokenTree::Token(Token::Not, _) => is_macro = true,
-                TokenTree::Token(Token::Ident(ref i), _) => {
-                    is_macro = false;
-                    last_ident = Some(&i);
-                }
-                TokenTree::Delimited(ref d, _) => {
-                    if is_macro && last_ident.map_or(false, |i| i.as_ref() == "cpp") {
-                        self.handle_cpp(&t)
-                    } else if is_macro && last_ident.map_or(false, |i| i.as_ref() == "cpp_class") {
-                        self.handle_cpp_class(&t)
-                    } else {
-                        self.parse_macro(&d.tts)
-                    }
-                    is_macro = false;
-                    last_ident = None;
-                }
-                _ => {
-                    is_macro = false;
-                    last_ident = None;
-                }
-            }
-        }
-    }
 }
