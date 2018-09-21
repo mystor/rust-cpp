@@ -1,6 +1,6 @@
 [package]
 name = "cpp"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 description = "Inline C++ code closures"
 readme = "../README.md"
@@ -11,4 +11,4 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp"
 
 [dependencies]
-cpp_macros = { version = "=0.4.0", path = "../cpp_macros" }
+cpp_macros = { version = "=0.5.0", path = "../cpp_macros" }
