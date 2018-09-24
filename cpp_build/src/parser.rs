@@ -318,6 +318,7 @@ pub struct Parser {
     pub callbacks_count: u32,
     current_path: PathBuf, // The current file being parsed
     mod_dir: PathBuf,
+    mod_error: Option<Error>, // An error occuring while visiting the modules
 }
 
 impl Parser {
@@ -348,6 +349,9 @@ impl Parser {
 
         self.find_cpp_macros(&s)?;
         self.visit_file(&fi);
+        if let Some(err) = self.mod_error.take() {
+            return Err(err);
+        }
 
         swap(&mut self.current_path, &mut current_path);
         swap(&mut self.mod_dir, &mut mod_dir);
@@ -515,6 +519,10 @@ impl<'ast> Visit<'ast> for Parser {
     }*/
 
     fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if self.mod_error.is_some() {
+            return;
+        }
+
         if item.content.is_some() {
             let mut parent = self.mod_dir.join(item.ident.to_string());
             swap(&mut self.mod_dir, &mut parent);
@@ -533,7 +541,7 @@ impl<'ast> Visit<'ast> for Parser {
                 })) if id == "path" =>
                 {
                     let mod_path = self.mod_dir.join(&s.value());
-                    return self.parse_mod(mod_path).unwrap();
+                    return self.parse_mod(mod_path).unwrap_or_else(|err| self.mod_error = Some(err));
                 }
                 _ => {}
             }
@@ -543,11 +551,11 @@ impl<'ast> Visit<'ast> for Parser {
         let mut subdir = self.mod_dir.join(mod_name.clone());
         subdir.push("mod.rs");
         if subdir.is_file() {
-            return self.parse_mod(subdir).unwrap();
+            return self.parse_mod(subdir).unwrap_or_else(|err| self.mod_error = Some(err));
         }
         let adjacent = self.mod_dir.join(&format!("{}.rs", mod_name));
         if adjacent.is_file() {
-            return self.parse_mod(adjacent).unwrap();
+            return self.parse_mod(adjacent).unwrap_or_else(|err| self.mod_error = Some(err));
         }
 
         panic!(
