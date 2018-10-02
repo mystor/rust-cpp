@@ -480,8 +480,7 @@ impl Parser {
             }
             Macro::Lit(_l) => {
                 self.snippets.push('\n');
-                let snip = line_directive(&self.current_path, begin)
-                    + &expand_sub_rust_macro(extracted.to_string(), ExpandSubMacroType::Lit)
+                let snip = expand_sub_rust_macro(line_directive(&self.current_path, begin) + extracted, ExpandSubMacroType::Lit)
                         .map_err(|e| e.add_line(begin.line))?;
                 self.snippets.push_str(&snip);
             }
