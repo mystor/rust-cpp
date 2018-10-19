@@ -26,14 +26,14 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Error::ParseCannotOpenFile { ref src_path } => {
+            Error::ParseCannotOpenFile { ref src_path } => {
                 write!(f, "Parsing crate: cannot open file `{}`.", src_path)
             }
-            &Error::ParseSyntaxError {
+            Error::ParseSyntaxError {
                 ref src_path,
                 ref error,
             } => write!(f, "Parsing crate:`{}`:\n{:?}", src_path, error),
-            &Error::LexError {
+            Error::LexError {
                 ref src_path,
                 ref line,
             } => write!(f, "{}:{}: Lexing error", src_path, line + 1),
@@ -149,7 +149,7 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
         result.insert_str(begin, &fn_call);
     }
 
-    return Ok(extra_decl + &result);
+    Ok(extra_decl + &result)
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn skip_literal(mut input: Cursor) -> PResult<bool> {
         input = input.advance(q + 1);
         return raw_string(input).map(|x| (x.0, true));
     }
-    return Ok((input, false));
+    Ok((input, false))
 }
 
 fn new_cursor(s: &str) -> Cursor {
@@ -270,7 +270,7 @@ fn find_delimited<'a>(mut input: Cursor<'a>, needle: &str) -> PResult<'a, ()> {
         }
         input = input.advance(1);
     }
-    return Err(LexError { line: input.line });
+    Err(LexError { line: input.line })
 }
 
 #[test]
@@ -307,7 +307,7 @@ fn line_directive(path: &PathBuf, cur: Cursor) -> String {
     for _ in 0..cur.column {
         line.push(' ');
     }
-    return line;
+    line
 }
 
 #[derive(Default)]
