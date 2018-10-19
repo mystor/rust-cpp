@@ -15,10 +15,10 @@ use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{Attribute, Ident, Type};
 
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const LIB_NAME: &'static str = "librust_cpp_generated.a";
-pub const MSVC_LIB_NAME: &'static str = "rust_cpp_generated.lib";
+pub const LIB_NAME: &str = "librust_cpp_generated.a";
+pub const MSVC_LIB_NAME: &str = "rust_cpp_generated.lib";
 
 pub mod flags {
     pub const IS_COPY_CONSTRUCTIBLE: u32 = 0;
