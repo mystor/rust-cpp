@@ -57,7 +57,7 @@ const INTERNAL_CPP_STRUCTS: &'static str = add_line!(r#"
 namespace rustcpp {
 
 // We can't just pass or return any type from extern "C" rust functions (because the call
-// convention may differ between the C++ type, and the rust type).
+// convention may differ between the C++ type, and the Rust type).
 // So we make sure to pass trivial structure that only contains a pointer to the object we want to
 // pass. The constructor of these helper class contains a 'container' of the right size which will
 // be allocated on the stack.

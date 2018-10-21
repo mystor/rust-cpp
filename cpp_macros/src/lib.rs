@@ -117,8 +117,8 @@ Version mismatch between cpp_macros and cpp_build for same crate."#
 }
 
 /// Try to open a file handle to the lib file. This is used to scan it for
-/// metadata. We check both MSVC_LIB_NAME and LIB_NAME, in case we are on
-/// or are targeting windows.
+/// metadata. We check both `MSVC_LIB_NAME` and `LIB_NAME`, in case we are on
+/// or are targeting Windows.
 fn open_lib_file() -> io::Result<File> {
     if let Ok(file) = File::open(OUT_DIR.join(MSVC_LIB_NAME)) {
         Ok(file)
@@ -155,7 +155,7 @@ fn find_all_rust_macro(
     return Ok(r);
 }
 
-/// Find the occurence of the strignify! macro within the macro derive
+/// Find the occurrence of the `stringify!` macro within the macro derive
 fn extract_original_macro(input: &syn::DeriveInput) -> Option<proc_macro2::TokenStream> {
     #[derive(Default)]
     struct Finder(Option<proc_macro2::TokenStream>);

@@ -63,8 +63,8 @@ extern crate cpp_macros;
 #[doc(hidden)]
 pub use cpp_macros::*;
 
-/// Internal macro which is used to locate the rust! invocations in the
-/// C++ code embbeded in cpp! invocation, to translate them into extern
+/// Internal macro which is used to locate the `rust!` invocations in the
+/// C++ code embedded in `cpp!` invocation, to translate them into `extern`
 /// functions
 #[doc(hidden)]
 #[macro_export]
@@ -126,7 +126,7 @@ macro_rules! __cpp_internal {
 /// }}
 /// ```
 ///
-/// The second variant is used to embed C++ code within rust code. A list of
+/// The second variant is used to embed C++ code within Rust code. A list of
 /// variable names which should be captured are taken as the first argument,
 /// with their corresponding C++ type. The body is compiled as a C++ function.
 ///
@@ -142,8 +142,8 @@ macro_rules! __cpp_internal {
 /// })};
 /// ```
 ///
-/// You can also put the unsafe keyword as the first keyword of the cpp! macro, which
-/// has the same effect as putting the whole macro in an unsafe block:
+/// You can also put the unsafe keyword as the first keyword of the `cpp!` macro, which
+/// has the same effect as putting the whole macro in an `unsafe` block:
 ///
 /// ```ignore
 /// let x: i32 = cpp!(unsafe [y as "int32_t", mut z as "int32_t"] -> i32 as "int32_t" {
@@ -154,8 +154,8 @@ macro_rules! __cpp_internal {
 ///
 /// ## rust! pseudo-macro
 ///
-/// The cpp! macro can contain, in the C++ code, a rust! sub-macro, which allows
-/// to include rust code in C++ code. This is useful to
+/// The `cpp!` macro can contain, in the C++ code, a `rust!` sub-macro, which allows
+/// the inclusion of Rust code in C++ code. This is useful to
 /// implement callback or override virtual functions. Example:
 ///
 /// ```ignore
@@ -178,12 +178,12 @@ macro_rules! __cpp_internal {
 /// }}
 /// ```
 ///
-/// The syntax for the rust! macro is:
+/// The syntax for the `rust!` macro is:
 /// ```ignore
 /// rust!($uniq_ident:ident [$($arg_name:ident : $arg_rust_type:ty as $arg_c_type:tt),*]
 ///      $(-> $ret_rust_type:ty as $rust_c_type:tt)* {$($body:tt)*})
 /// ```
-/// uniq_ident is an unique identifier which will be used to name the extern function
+/// `uniq_ident` is a unique identifier which will be used to name the `extern` function
 #[macro_export]
 macro_rules! cpp {
     // raw text inclusion
@@ -213,8 +213,8 @@ pub trait CppTrait {
     const CPP_TYPE: &'static str;
 }
 
-/// This macro allow to wrap a relocatable C++ struct or class that might have
-/// destructor or copy constructor, instantiating the Drop and Clone trait
+/// This macro allows wrapping a relocatable C++ struct or class that might have
+/// a destructor or copy constructor, implementing the `Drop` and `Clone` trait
 /// appropriately.
 ///
 /// ```ignore
@@ -231,8 +231,8 @@ pub trait CppTrait {
 /// }
 /// ```
 ///
-/// This will create a rust struct MyClass, which has the same size and
-/// alignment as the the C++ class "MyClass". It will also implement the `Drop` trait
+/// This will create a Rust struct `MyClass`, which has the same size and
+/// alignment as the C++ class `MyClass`. It will also implement the `Drop` trait
 /// calling the destructor, the `Clone` trait calling the copy constructor, if the
 /// class is copyable (or `Copy` if it is trivially copyable), and `Default` if the class
 /// is default constructible
@@ -250,7 +250,7 @@ pub trait CppTrait {
 /// * The trait `PartialOrd` need the C++ `operator<` for that type. `lt`, `le`, `gt` and
 ///   `ge` will use the corresponding C++ operator if it is defined, otherwise it will
 ///   fallback to the less than operator. For PartialOrd::partial_cmp, the `operator<` will
-///   be called twice. Note that it will never return None.
+///   be called twice. Note that it will never return `None`.
 /// * The trait `Ord` can also be specified when the semantics of the `operator<` corresponds
 ///   to a total order
 ///
@@ -265,11 +265,11 @@ pub trait CppTrait {
 ///
 /// Unfortunately, as the STL often uses internal self-references for
 /// optimization purposes, such as the small-string optimization, this disallows
-/// most std:: classes. This restriction exists because safe rust is allowed to
+/// most std:: classes. This restriction exists because safe Rust is allowed to
 /// move your types around.
 ///
 /// Most C++ types which do not contain self-references will be compatible,
-/// although this property cannot be statically checked by rust-cpp.
+/// although this property cannot be statically checked by `rust-cpp`.
 ///
 #[macro_export]
 macro_rules! cpp_class {
