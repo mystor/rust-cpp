@@ -34,7 +34,7 @@ pub mod kw {
 }
 
 /// This constant is expected to be a unique string within the compiled binary
-/// which preceeds a definition of the metadata. It begins with
+/// which precedes a definition of the metadata. It begins with
 /// rustcpp~metadata, which is printable to make it easier to locate when
 /// looking at a binary dump of the metadata.
 ///
@@ -76,7 +76,7 @@ pub struct Capture {
 }
 
 impl Parse for Capture {
-    /// Parse a single captured variable inside within a cpp! macro.
+    /// Parse a single captured variable inside within a `cpp!` macro.
     /// Example: `mut foo as "int"`
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Capture {
@@ -118,12 +118,12 @@ impl ClosureSig {
 pub struct Closure {
     pub sig: ClosureSig,
     pub body: TokenTree,
-    pub body_str: String, // with rust! macro replaced
+    pub body_str: String, // with `rust!` macro replaced
     pub callback_offset: u32,
 }
 
 impl Parse for Closure {
-    /// Parse the inside of a cpp! macro when this macro is a closure.
+    /// Parse the inside of a `cpp!` macro when this macro is a closure.
     /// Example: `unsafe [foo as "int"] -> u32 as "int" { /*... */ }
     fn parse(input: ParseStream) -> Result<Self> {
         input.parse::<Option<Token![unsafe]>>()?;
@@ -207,7 +207,7 @@ impl Class {
 }
 
 impl Parse for Class {
-    /// Parse the inside of a cpp_class! macro.
+    /// Parse the inside of a `cpp_class!` macro.
     /// Example: `#[derive(Default)] pub unsafe struct Foobar as "FooBar"`
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Class {
@@ -234,7 +234,7 @@ pub enum Macro {
 }
 
 impl Parse for Macro {
-    ///! Parse the inside of a cpp! macro (a literal or a closure)
+    ///! Parse the inside of a `cpp!` macro (a literal or a closure)
     fn parse(input: ParseStream) -> Result<Self> {
         if input.peek(syn::token::Brace) {
             let content;
@@ -255,7 +255,7 @@ pub struct RustInvocation {
 }
 
 impl Parse for RustInvocation {
-    /// Parse a rust! macro something looking like `rust!(ident [foo : bar as "bar"] { /*...*/ })`
+    /// Parse a `rust!` macro something looking like `rust!(ident [foo : bar as "bar"] { /*...*/ })`
     fn parse(input: ParseStream) -> Result<Self> {
         let rust_token = input.parse::<kw::rust>()?;
         input.parse::<Token![!]>()?;
