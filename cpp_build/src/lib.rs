@@ -218,8 +218,7 @@ extern "C" {{
                         format!("{} const& {}", cpp, name)
                     }
                 },
-            )
-            .collect::<Vec<_>>()
+            ).collect::<Vec<_>>()
             .join(", ");
 
         if is_void {

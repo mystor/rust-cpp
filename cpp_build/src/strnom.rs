@@ -27,12 +27,11 @@ impl<'a> Cursor<'a> {
         Cursor {
             rest: &self.rest[amt..],
             off: self.off + (amt as u32),
-            line: self.line
-                + self.rest[..amt]
-                    .char_indices()
-                    .filter(|&(_, ref x)| *x == '\n')
-                    .map(|(i, _)| column_start = Some(i))
-                    .count() as u32,
+            line: self.line + self.rest[..amt]
+                .char_indices()
+                .filter(|&(_, ref x)| *x == '\n')
+                .map(|(i, _)| column_start = Some(i))
+                .count() as u32,
             column: match column_start {
                 None => self.column + (amt as u32),
                 Some(i) => (amt - i) as u32 - 1,

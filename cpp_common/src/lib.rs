@@ -131,10 +131,10 @@ impl Parse for Closure {
         // Capture
         let capture_content;
         bracketed!(capture_content in input);
-        let captures = syn::punctuated::Punctuated::<Capture, Token![,]>::parse_terminated(
-            &capture_content,
-        )?.into_iter()
-            .collect();
+        let captures =
+            syn::punctuated::Punctuated::<Capture, Token![,]>::parse_terminated(&capture_content)?
+                .into_iter()
+                .collect();
 
         // Optional return type
         let (ret, cpp) = if input.peek(Token![->]) {
@@ -278,8 +278,7 @@ impl Parse for RustInvocation {
                             let s = input.parse::<syn::LitStr>()?.value();
                             Ok((i, s))
                         },
-                    )?
-                    .into_iter()
+                    )?.into_iter()
                     .collect()
             },
             return_type: if macro_content.peek(Token![->]) {
