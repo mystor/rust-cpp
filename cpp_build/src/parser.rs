@@ -303,7 +303,11 @@ fn test_cursor_advance() -> Result<(), LexError> {
 }
 
 fn line_directive(path: &PathBuf, cur: Cursor) -> String {
-    let mut line = format!("#line {} {:?}\n", cur.line + 1, path);
+    let mut line = format!(
+        "#line {} \"{}\"\n",
+        cur.line + 1,
+        path.to_string_lossy().replace('\\', "\\\\")
+    );
     for _ in 0..cur.column {
         line.push(' ');
     }
