@@ -74,20 +74,49 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
     let mut result = input;
     let mut extra_decl = String::new();
     let mut search_index = 0;
-    while let Some(index) = result[search_index..].find("rust!") {
-        let (rust_invocation, begin, end) = {
+
+    loop {
+        let (begin, end, line) = {
+            let mut begin = 0;
             let mut cursor = new_cursor(&result);
-            cursor = cursor.advance(search_index + index);
-            search_index = cursor.off as usize + 4;
+            cursor.advance(search_index);
+            while !cursor.is_empty() {
+                cursor = skip_whitespace(cursor);
+                let r = skip_literal(cursor)?;
+                cursor = r.0;
+                if r.1 {
+                    continue;
+                }
+                if cursor.is_empty() {
+                    break;
+                }
+                if let Ok((cur, ident)) = symbol(cursor) {
+                    begin = cursor.off as usize;
+                    cursor = cur;
+                    if ident != "rust" {
+                        continue;
+                    }
+                } else {
+                    cursor = cursor.advance(1);
+                    continue;
+                }
+                cursor = skip_whitespace(cursor);
+                if !cursor.starts_with("!") {
+                    continue;
+                }
+                break;
+            }
+            if cursor.is_empty() {
+                return Ok(extra_decl + &result);
+            }
             let end = find_delimited((find_delimited(cursor, "(")?.0).advance(1), ")")?.0;
-            let input: ::proc_macro2::TokenStream = (&cursor.rest
-                [..(end.off + 1 - cursor.off) as usize])
-                .parse()
-                .map_err(|_| LineError(cursor.line, "TokenStream parse error".into()))?;
-            let rust_invocation = ::syn::parse2::<RustInvocation>(input)
-                .map_err(|e| LineError(cursor.line, e.to_string()))?;
-            (rust_invocation, cursor.off as usize, end.off as usize + 1)
+            (begin, end.off as usize + 1, cursor.line)
         };
+        let input: ::proc_macro2::TokenStream = result[begin..end]
+            .parse()
+            .map_err(|_| LineError(line, "TokenStream parse error".into()))?;
+        let rust_invocation =
+            ::syn::parse2::<RustInvocation>(input).map_err(|e| LineError(line, e.to_string()))?;
         let fn_name = match t {
             ExpandSubMacroType::Lit => {
                 extra_decl.push_str(&format!("extern \"C\" void {}();\n", rust_invocation.id));
@@ -147,9 +176,8 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
         };
         // add the invocation of call where the rust! macro used to be.
         result.insert_str(begin, &fn_call);
+        search_index = begin + fn_call.len();
     }
-
-    Ok(extra_decl + &result)
 }
 
 #[test]
@@ -168,6 +196,12 @@ fn test_expand_sub_rust_macro() {
         ExpandSubMacroType::Lit,
     );
     assert_eq!(x.unwrap(), "extern \"C\" void xxx();\nextern \"C\" void yyy();\n{ hello( reinterpret_cast<void (*)()>(xxx)(), reinterpret_cast<void (*)()>(yyy)(); ) }");
+
+    let s = "{ /* rust! */  /* rust!(xxx [] { 1 }) */ }".to_owned();
+    assert_eq!(
+        expand_sub_rust_macro(s.clone(), ExpandSubMacroType::Lit).unwrap(),
+        s
+    );
 }
 
 #[path = "strnom.rs"]
