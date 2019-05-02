@@ -296,7 +296,7 @@ macro_rules! cpp_class {
 #[macro_export]
 macro_rules! __cpp_class_internal {
     (@parse [$($attrs:tt)*] [$($vis:tt)*] [unsafe struct $name:ident as $type:expr]) => {
-        __cpp_class_internal!{@parse_attributes [ $($attrs)* ]  [
+        __cpp_class_internal!{@parse_attributes [ $($attrs)* ] [] [
             #[derive(__cpp_internal_class)]
             #[repr(C)]
             $($vis)* struct $name {
@@ -306,11 +306,11 @@ macro_rules! __cpp_class_internal {
         ]}
     };
 
-    (@parse_attributes [] [$($result:tt)*]) => ( $($result)* );
-    (@parse_attributes [#[derive($($der:ident),*)] $($tail:tt)* ] [$($result:tt)*] )
-        => (__cpp_class_internal!{@parse_derive [$($der),*] @parse_attributes [$($tail)*] [ $($result)* ] } );
-    (@parse_attributes [ #[$m:meta] $($tail:tt)* ]  [$($result:tt)*])
-        => (__cpp_class_internal!{@parse_attributes [$($tail)*]  [ #[$m] $($result)* ] } );
+    (@parse_attributes [] [$($attributes:tt)*] [$($result:tt)*]) => ( $($attributes)* $($result)* );
+    (@parse_attributes [#[derive($($der:ident),*)] $($tail:tt)* ] [$($attributes:tt)*] [$($result:tt)*] )
+        => (__cpp_class_internal!{@parse_derive [$($der),*] @parse_attributes [$($tail)*] [ $($attributes)* ] [ $($result)* ] } );
+    (@parse_attributes [ #[$m:meta] $($tail:tt)* ] [$($attributes:tt)*] [$($result:tt)*])
+        => (__cpp_class_internal!{@parse_attributes [$($tail)*] [$($attributes)* #[$m] ] [ $($result)* ] } );
 
     (@parse_derive [] @parse_attributes $($result:tt)*) => (__cpp_class_internal!{@parse_attributes $($result)*} );
     (@parse_derive [PartialEq $(,$tail:ident)*] $($result:tt)*)
@@ -325,6 +325,6 @@ macro_rules! __cpp_class_internal {
         => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [Copy $(,$tail:ident)*] $($result:tt)*)
         => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
-    (@parse_derive [$i:ident $(,$tail:ident)*] @parse_attributes [$($attr:tt)*] [$($result:tt)*] )
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] @parse_attributes [$($attr)*] [ #[derive($i)] $($result)* ] } );
+    (@parse_derive [$i:ident $(,$tail:ident)*] @parse_attributes [$($attr:tt)*] [$($attributes:tt)*] [$($result:tt)*] )
+        => ( __cpp_class_internal!{@parse_derive [$($tail),*] @parse_attributes [$($attr)*] [$($attributes)* #[derive($i)] ] [ $($result)* ] } );
 }
