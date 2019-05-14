@@ -345,7 +345,9 @@ struct MetaData {{
 }};
 
 MetaData
-#ifdef __GNUC__
+#ifdef _WIN64
+    __declspec (selectany)
+#elif __GNUC__
     __attribute__((weak))
 #endif
     metadata = {{
