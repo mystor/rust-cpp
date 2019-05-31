@@ -596,6 +596,19 @@ impl<'ast> Visit<'ast> for Parser {
                 .parse_mod(subdir)
                 .unwrap_or_else(|err| self.mod_error = Some(err));
         }
+
+        let mut adjacent_subdir = self.current_path.clone();
+        if let Some(cur_mod_dir) = adjacent_subdir.file_stem().map(|x| x.to_owned()) {
+            adjacent_subdir.pop();
+            adjacent_subdir.push(cur_mod_dir);
+            adjacent_subdir.push(format!("{}.rs", mod_name));
+            if adjacent_subdir.is_file() {
+                return self
+                    .parse_mod(adjacent_subdir)
+                    .unwrap_or_else(|err| self.mod_error = Some(err));
+            }
+        }
+
         let adjacent = self.mod_dir.join(&format!("{}.rs", mod_name));
         if adjacent.is_file() {
             return self
