@@ -644,7 +644,11 @@ In order to provide a better error message, the build script will exit successfu
             self.cc.flag_if_supported("-std=c++11");
         }
         // Build the C++ library
-        self.cc.file(filename).compile(LIB_NAME);
+        if let Err(e) = self.cc.file(filename).try_compile(LIB_NAME) {
+            let _ = writeln!(std::io::stderr(), "\n\nerror occurred: {:?}\n\n", e);
+            #[cfg(not(feature = "docs-only"))]
+            std::process::exit(1);
+        }
     }
 }
 
