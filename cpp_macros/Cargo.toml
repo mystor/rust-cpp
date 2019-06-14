@@ -1,6 +1,6 @@
 [package]
 name = "cpp_macros"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 description = "Procedural macro implementation for the `cpp` crate"
 readme = "../README.md"
@@ -15,7 +15,7 @@ proc-macro = true
 
 [dependencies]
 lazy_static = "1.0"
-cpp_common = { path = "../cpp_common", version = "=0.5.1" }
+cpp_common = { path = "../cpp_common", version = "=0.5.2" }
 syn = { version = "0.15", features=["full", "visit"] }
 quote = "0.6"
 proc-macro2 = "0.4"
