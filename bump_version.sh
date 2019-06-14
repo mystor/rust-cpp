@@ -8,7 +8,7 @@ echo "updating $old_version to $version"
 for toml in */Cargo.toml; do
   cp $toml $toml.bk
   cat $toml.bk \
-    | sed -e 's/\(\(^\|cpp_common.\+\)version = \"=\?\)'$old_version'/\1'$version'/g' \
+    | sed -e 's/\(\(^\|cpp_.\+\)version = \"=\?\)'$old_version'/\1'$version'/g' \
     > $toml
   rm $toml.bk
 done
