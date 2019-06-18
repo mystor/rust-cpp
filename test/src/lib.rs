@@ -13,6 +13,10 @@ mod nomod {
     pub mod inner;
 }
 
+// This non-existent module should not be parsed
+#[cfg(feature = "non_existent")]
+mod non_existent;
+
 fn add_two(x: i32) -> i32 {
     x + 2
 }
