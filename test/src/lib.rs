@@ -7,6 +7,9 @@ extern crate cpp;
 #[cfg(test)]
 mod inner;
 
+#[cfg(test)]
+mod inner_sibling;
+
 // Test that module resolution works correctly with inline modules.
 #[cfg(test)]
 mod nomod {
@@ -143,6 +146,14 @@ fn test_inner() {
     assert_eq!(y, 10);
     let y = inner::innerpath::explicit_path(10);
     assert_eq!(y, 10);
+}
+
+#[test]
+fn inner_sibling() {
+    let x = inner_sibling::inner_sibling();
+    assert_eq!(x, 10);
+    let y = inner_sibling::child::inner_sibling_child();
+    assert_eq!(y, 20);
 }
 
 #[test]
