@@ -56,6 +56,18 @@
 //!     }
 //! }
 //! ```
+//!
+//! # Limitations
+//!
+//! As with all procedure macro crates we also need to parse Rust source files to
+//! extract C++ code. That leads to the fact that some of the language features
+//! might not be supported in full. One example is the attributes. Only a limited
+//! number of attributes is supported, namely: `#[path = "..."]` for `mod`
+//! declarations to specify an alternative path to the module file and
+//! `#[cfg(feature = "...")]` for `mod` declarations to conditionally include the
+//! module into the parsing process. Please note that the latter is only supported
+//! in its simplest form: straight-forward `feature = "..."` without any
+//! additional conditions, `cfg!` macros are also not supported at the moment.
 
 #[macro_use]
 #[allow(unused_imports)]
