@@ -10,6 +10,11 @@ categories = ["development-tools::ffi"]
 repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp_macros"
 
+[features]
+# Ignore compilations error of the C++ code when building the documentation, as the docs.rs server
+# might not have the required libraries
+docs-only = []
+
 [lib]
 proc-macro = true
 
