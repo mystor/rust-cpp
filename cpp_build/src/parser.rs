@@ -572,6 +572,7 @@ impl<'ast> Visit<'ast> for Parser {
         // Determine the path of the inner module's file
         for attr in &item.attrs {
             match attr.interpret_meta() {
+                // parse #[path = "foo.rs"]: read module from the specified path
                 Some(syn::Meta::NameValue(syn::MetaNameValue {
                     ident: ref id,
                     lit: syn::Lit::Str(ref s),
@@ -583,7 +584,33 @@ impl<'ast> Visit<'ast> for Parser {
                     return self
                         .parse_mod(mod_path)
                         .unwrap_or_else(|err| self.mod_error = Some(err));
-                }
+                },
+                // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
+                Some(syn::Meta::List(syn::MetaList {
+                    ident: ref id,
+                    nested: ref nesteds,
+                    ..
+                }))
+                    if id == "cfg" =>
+                {
+                    for nested in nesteds {
+                        match nested {
+                            syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
+                                ident: cfg_id,
+                                lit: syn::Lit::Str(feature),
+                                ..
+                            }))
+                                if cfg_id == "feature" =>
+                            {
+                                let feature_env_var = "CARGO_FEATURE_".to_owned() + &feature.value().to_uppercase().replace("-", "_");
+                                if let None = std::env::var_os(feature_env_var) {
+                                    return;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                },
                 _ => {}
             }
         }
