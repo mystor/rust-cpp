@@ -143,6 +143,29 @@ fn no_captures() {
 }
 
 #[test]
+fn duplicates() {
+    // Test that we can call two captures with the same tokens
+
+    let fn1 = |x| cpp!{ unsafe [x as "int"] -> i32 as "int" {
+        static int sta;
+        sta += x;
+        return sta;
+    }};
+    let fn2 = |x| cpp!{ unsafe [x as "int"] -> i32 as "int" {
+        static int sta;
+        sta += x;
+        return sta;
+    }};
+    assert_eq!(fn1(8), 8);
+    assert_eq!(fn1(2), 10);
+
+    // Since both the cpp! inside fn1 and fn2 are made of the same token, the same
+    // function is actually generated, meaning they share the same static variable.
+    // This might be confusing, I hope nobody relies on this behavior.
+    assert_eq!(fn2(1), 11);
+}
+
+#[test]
 fn test_inner() {
     let x = inner::inner();
     assert_eq!(x, 10);

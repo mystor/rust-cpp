@@ -24,6 +24,7 @@ use std::env;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::collections::hash_map::{HashMap, Entry};
 
 mod parser;
 
@@ -162,6 +163,8 @@ extern "C" {{
 
     write!(output, "{}\n\n", &visitor.snippets).unwrap();
 
+    let mut hashmap = HashMap::new();
+
     let mut sizealign = vec![];
     for &Closure {
         ref body_str,
@@ -178,6 +181,18 @@ extern "C" {{
 
         let hash = sig.name_hash();
         let name = sig.extern_name();
+
+        match hashmap.entry(hash) {
+            Entry::Occupied(e) => {
+                if *e.get() != sig {
+                    // Let the compiler do a compilation error. FIXME: report a better error
+                    warnln!("Hash collision detected.");
+                } else {
+                    continue;
+                }
+            },
+            Entry::Vacant(e) => { e.insert(sig); }
+        }
 
         let is_void = cpp == "void";
 
