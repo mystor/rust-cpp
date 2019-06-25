@@ -33,6 +33,9 @@ public:
   A(int a, int b) : a(a), b(b) { counter()++; }
   A(const A &cpy) : a(cpy.a), b(cpy.b) { counter()++; }
   ~A() { counter()--; }
+#if !defined (_MSC_VER) || (_MSC_VER + 0 >= 1900)
+  A &operator=(const A&) = default;
+#endif
   void setValues(int _a, int _b) { a = _a; b = _b; }
   int multiply() const { return a * b; }
 };
