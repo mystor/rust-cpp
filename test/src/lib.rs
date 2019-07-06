@@ -20,6 +20,10 @@ mod nomod {
 #[cfg(feature = "non_existent")]
 mod non_existent;
 
+// This module with invalid cpp code should not be parsed
+#[cfg(feature = "non_existent")]
+mod invalid_code;
+
 fn add_two(x: i32) -> i32 {
     x + 2
 }
