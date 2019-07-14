@@ -11,8 +11,6 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
-extern crate cpp_common;
-
 extern crate proc_macro;
 extern crate proc_macro2;
 use proc_macro2::Span;
@@ -24,6 +22,8 @@ extern crate aho_corasick;
 
 extern crate byteorder;
 
+#[path="../../cpp_common/cpp_common.rs"]
+mod cpp_common;
 use cpp_common::{flags, kw, RustInvocation, FILE_HASH, LIB_NAME, MSVC_LIB_NAME, OUT_DIR, VERSION};
 use std::collections::HashMap;
 use std::iter::FromIterator;

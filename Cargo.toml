@@ -2,7 +2,6 @@
 members = [
     'cpp',
     'cpp_build',
-    'cpp_common',
     'cpp_macros',
     'test',
 ]
