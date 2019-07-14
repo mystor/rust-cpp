@@ -2,7 +2,7 @@
 //!
 //! # Usage
 //!
-//! This crate must be used in tandem with the `cpp_build` crate. A basic Cargo
+//! This crate must be used in tandem with the [`cpp_build`]((https://docs.rs/cpp_build) crate. A basic Cargo
 //! project which uses these projects would have a structure like the following:
 //!
 //! ```text
@@ -30,7 +30,7 @@
 //!
 //! #### build.rs
 //!
-//! ```ignore
+//! ```no_run
 //! extern crate cpp_build;
 //!
 //! fn main() {
@@ -56,6 +56,37 @@
 //!     }
 //! }
 //! ```
+//!
+//! # Build script
+//!
+//! Use the `cpp_build` crates from your `build.rs` script.
+//! The same version of `cpp_build` and `cpp` crates should be used.
+//! You can simply use the `cpp_build::build` function, or the `cpp_build::Config`
+//! struct if you want more option.
+//!
+//! Behing the scene, it uses the `cc` crate.
+//!
+//! ## Using external liraries
+//!
+//! Most likely you will want to link against external libraries. You need to tell cpp_build
+//! about the include path and other flags via `cpp_build::Config` and you need to let cargo
+//! know about the link. More info in the [cargo docs](https://doc.rust-lang.org/cargo/reference/build-scripts.html).
+//!
+//! Your `build.rs` could look like this:
+//!
+//! ```no_run
+//! fn main() {
+//!     let include_path = "/usr/include/myexternallib";
+//!     let lib_path = "/usr/lib/myexternallib";
+//!     cpp_build::Config::new().include(include_path).build("src/lib.rs");
+//!     println!("cargo:rustc-link-search={}", lib_path);
+//!     println!("cargo:rustc-link-lib=myexternallib");
+//! }
+//! ```
+//!
+//! (But you probably want to allow to configure the path via environment variables or
+//! find them using some external tool such as the `pkg-config` crate, instead of hardcoding
+//! them in the source)
 //!
 //! # Limitations
 //!
@@ -280,15 +311,24 @@ pub trait CppTrait {
 /// easy to break.
 ///
 /// A notable restriction is that this macro only works if the C++ class is
-/// relocatable, i.e., can be moved in memory using `memmove`.
+/// relocatable.
 ///
-/// Unfortunately, as the STL often uses internal self-references for
-/// optimization purposes, such as the small-string optimization, this disallows
-/// most std:: classes. This restriction exists because safe Rust is allowed to
-/// move your types around.
+/// ## Relocatable classes
+///
+/// In order to be able to we wrapped the C++ class must be relocatable. That means
+/// that it can be moved in memory using `memcpy`. This restriction exists because
+/// safe Rust is allowed to move your types around.
 ///
 /// Most C++ types which do not contain self-references will be compatible,
 /// although this property cannot be statically checked by `rust-cpp`.
+/// All types that satisfy `std::is_trivially_copyable` are compatible.
+/// Maybe future version of the C++ standard would allow a comile-time check:
+/// [P1144](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r4.html)
+///
+/// Unfortunately, as the STL often uses internal self-references for
+/// optimization purposes, such as the small-string optimization, this disallows
+/// most std:: classes.
+/// But `std::unique_ptr<T>` and `std::shared_ptr<T>` works.
 ///
 #[macro_export]
 macro_rules! cpp_class {
