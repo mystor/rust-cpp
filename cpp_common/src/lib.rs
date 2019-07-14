@@ -40,7 +40,7 @@ pub mod kw {
 ///
 /// NOTE: In the future we may want to use a object file parser and a custom
 /// section rather than depending on this string being unique.
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
     b'r', b'u', b's', b't', b'c', b'p', b'p', b'~',
     b'm', b'e', b't', b'a', b'd', b'a', b't', b'a',
@@ -227,6 +227,7 @@ impl Parse for Class {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Macro {
     Closure(Closure),

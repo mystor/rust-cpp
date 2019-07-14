@@ -4,7 +4,7 @@
 //! For more information, see the [`cpp` crate module level
 //! documentation](https://docs.rs/cpp).
 
-#![cfg_attr(feature = "cargo-clippy", allow(write_with_newline))]
+#![allow(clippy::write_with_newline)]
 
 extern crate cc;
 extern crate cpp_common;
@@ -150,7 +150,7 @@ fn gen_cpp_lib(visitor: &parser::Parser) -> PathBuf {
     write!(output, "{}", INTERNAL_CPP_STRUCTS).unwrap();
 
     if visitor.callbacks_count > 0 {
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         write_add_line!(output, r#"
 extern "C" {{
     void (*rust_cpp_callbacks{file_hash}[{callbacks_count}])() = {{}};
@@ -239,7 +239,7 @@ extern "C" {{
             .join(", ");
 
         if is_void {
-            #[cfg_attr(rustfmt, rustfmt_skip)]
+            #[rustfmt::skip]
             write_add_line!(output, r#"
 extern "C" {{
 void {name}({params}) {{
@@ -258,7 +258,7 @@ void {name}({params}) {{
                 .map(|&Capture { ref name, .. }| name.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
-            #[cfg_attr(rustfmt, rustfmt_skip)]
+            #[rustfmt::skip]
             write_add_line!(output, r#"
 static inline {ty} {name}_impl({params}) {{
 {body}
@@ -318,7 +318,7 @@ void {name}({params}{comma} void* __result) {{
         magic.push(format!("{}", mag));
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     write_add_line!(output, r#"
 
 namespace rustcpp {{
@@ -417,6 +417,10 @@ Failed to create output object directory."#,
 pub struct Config {
     cc: cc::Build,
     std_flag_set: bool, // true if the -std flag was specified
+}
+
+impl Default for Config {
+    fn default() -> Self { Config::new() }
 }
 
 impl Config {

@@ -603,7 +603,7 @@ impl<'ast> Visit<'ast> for Parser {
                                 if cfg_id == "feature" =>
                             {
                                 let feature_env_var = "CARGO_FEATURE_".to_owned() + &feature.value().to_uppercase().replace("-", "_");
-                                if let None = std::env::var_os(feature_env_var) {
+                                if std::env::var_os(feature_env_var).is_none() {
                                     return;
                                 }
                             }
