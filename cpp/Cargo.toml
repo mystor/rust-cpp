@@ -14,4 +14,4 @@ documentation = "https://docs.rs/cpp"
 cpp_macros = { version = "=0.5.3", path = "../cpp_macros" }
 
 [dev-dependencies]
-cpp_build = { path = "../cpp_build" }
+cpp_build = { version = "=0.5.3", path = "../cpp_build" }
