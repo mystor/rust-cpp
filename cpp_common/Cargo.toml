@@ -1,6 +1,6 @@
 [package]
 name = "cpp_common"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 description = "Implementation details crate for the `cpp` crate"
 readme = "../README.md"
