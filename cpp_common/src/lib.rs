@@ -1,4 +1,9 @@
-///! Shared code between the cpp_macros and the cpp_common crate
+#[macro_use]
+extern crate syn;
+extern crate proc_macro2;
+
+#[macro_use]
+extern crate lazy_static;
 
 use std::collections::hash_map::DefaultHasher;
 use std::env;
@@ -13,11 +18,9 @@ use syn::{Attribute, Ident, Type};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const LIB_NAME: &str = "librust_cpp_generated.a";
-#[allow(dead_code)]
 pub const MSVC_LIB_NAME: &str = "rust_cpp_generated.lib";
 
 pub mod flags {
-    #![allow(dead_code)]
     pub const IS_COPY_CONSTRUCTIBLE: u32 = 0;
     pub const IS_DEFAULT_CONSTRUCTIBLE: u32 = 1;
     pub const IS_TRIVIALLY_DESTRUCTIBLE: u32 = 2;

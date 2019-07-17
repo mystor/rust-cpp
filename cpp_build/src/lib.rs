@@ -7,9 +7,9 @@
 #![allow(clippy::write_with_newline)]
 
 extern crate cc;
+extern crate cpp_common;
 extern crate proc_macro2;
 extern crate regex;
-#[macro_use]
 extern crate syn;
 extern crate unicode_xid;
 
@@ -19,8 +19,6 @@ extern crate lazy_static;
 #[macro_use]
 mod strnom;
 
-#[path="../../cpp_common/cpp_common.rs"]
-mod cpp_common;
 use cpp_common::*;
 use std::env;
 use std::fs::{create_dir, remove_dir_all, File};

@@ -18,7 +18,8 @@ docs-only = []
 [dependencies]
 lazy_static = "1.0"
 cc = "1.0"
-syn = { version = "0.15", features=["full", "visit", "extra-traits"] }
+cpp_common = { path = "../cpp_common", version = "=0.5.2" }
+syn = { version = "0.15", features=["full", "visit"] }
 proc-macro2 = "0.4"
 regex = "1"
 unicode-xid = "0.1"
