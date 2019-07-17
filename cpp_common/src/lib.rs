@@ -1,3 +1,8 @@
+//! Implementation detail for the `cpp` crate.
+//!
+//! The purpose of this crate is only to allow sharing code between the
+//! `cpp_build` and the `cpp_macros` crates.
+
 #[macro_use]
 extern crate syn;
 extern crate proc_macro2;
