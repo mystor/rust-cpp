@@ -664,7 +664,7 @@ In order to provide a better error message, the build script will exit successfu
         }
         // Build the C++ library
         if let Err(e) = self.cc.file(filename).try_compile(LIB_NAME) {
-            let _ = writeln!(std::io::stderr(), "\n\nerror occurred: {:?}\n\n", e);
+            let _ = writeln!(std::io::stderr(), "\n\nerror occurred: {}\n\n", e);
             #[cfg(not(feature = "docs-only"))]
             std::process::exit(1);
         }
