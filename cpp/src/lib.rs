@@ -2,7 +2,7 @@
 //!
 //! # Usage
 //!
-//! This crate must be used in tandem with the [`cpp_build`]((https://docs.rs/cpp_build) crate. A basic Cargo
+//! This crate must be used in tandem with the [`cpp_build`](https://docs.rs/cpp_build) crate. A basic Cargo
 //! project which uses these projects would have a structure like the following:
 //!
 //! ```text
@@ -41,19 +41,24 @@
 //! #### lib.rs
 //!
 //! ```ignore
+//! # // tested in test/src/examples.rs
 //! #[macro_use]
 //! extern crate cpp;
 //!
 //! cpp!{{
-//!     #include <stdio.h>
+//!     #include <iostream>
 //! }}
 //!
 //! fn main() {
-//!     unsafe {
-//!         cpp!([] {
-//!             printf("Hello, World!\n");
-//!         });
-//!     }
+//!     let name = std::ffi::CString::new("World").unwrap();
+//!     let name_ptr = name.as_ptr();
+//!     let r = unsafe {
+//!         cpp!([name_ptr as "const char *"] -> u32 as "int32_t" {
+//!             std::cout << "Hello, " << name_ptr << std::endl;
+//!             return 42;
+//!         })
+//!     };
+//!     assert_eq!(r, 42)
 //! }
 //! ```
 //!
@@ -64,7 +69,7 @@
 //! You can simply use the `cpp_build::build` function, or the `cpp_build::Config`
 //! struct if you want more option.
 //!
-//! Behing the scene, it uses the `cc` crate.
+//! Behind the scene, it uses the `cc` crate.
 //!
 //! ## Using external liraries
 //!

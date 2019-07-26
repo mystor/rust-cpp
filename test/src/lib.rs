@@ -28,6 +28,8 @@ fn add_two(x: i32) -> i32 {
     x + 2
 }
 
+mod examples;
+
 cpp!{{
     #define _USE_MATH_DEFINES
     #include <math.h>
