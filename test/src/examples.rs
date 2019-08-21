@@ -1,5 +1,4 @@
-
-cpp!{{
+cpp! {{
     #include <iostream>
 }}
 

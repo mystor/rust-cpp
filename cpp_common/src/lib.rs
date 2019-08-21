@@ -196,13 +196,14 @@ impl Class {
             use syn::{Meta, NestedMeta};
             x.interpret_meta().map_or(false, |m| {
                 if let Meta::List(ref list) = m {
-                    list.ident == "derive" && list.nested.iter().any(|y| {
-                        if let NestedMeta::Meta(Meta::Word(ref d)) = y {
-                            d == i
-                        } else {
-                            false
-                        }
-                    })
+                    list.ident == "derive"
+                        && list.nested.iter().any(|y| {
+                            if let NestedMeta::Meta(Meta::Word(ref d)) = y {
+                                d == i
+                            } else {
+                                false
+                            }
+                        })
                 } else {
                     false
                 }
@@ -284,7 +285,8 @@ impl Parse for RustInvocation {
                             let s = input.parse::<syn::LitStr>()?.value();
                             Ok((i, s))
                         },
-                    )?.into_iter()
+                    )?
+                    .into_iter()
                     .collect()
             },
             return_type: if macro_content.peek(Token![->]) {
