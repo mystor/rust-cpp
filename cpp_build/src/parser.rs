@@ -206,7 +206,7 @@ fn test_expand_sub_rust_macro() {
 
 #[path = "strnom.rs"]
 mod strnom;
-use strnom::*;
+use crate::strnom::*;
 
 fn skip_literal(mut input: Cursor) -> PResult<bool> {
     //input = whitespace(input)?.0;
