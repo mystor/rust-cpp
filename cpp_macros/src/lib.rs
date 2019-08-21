@@ -175,7 +175,7 @@ fn extract_original_macro(input: &syn::DeriveInput) -> Option<proc_macro2::Token
     impl<'ast> syn::visit::Visit<'ast> for Finder {
         fn visit_macro(&mut self, mac: &'ast syn::Macro) {
             if mac.path.segments.len() == 1 && mac.path.segments[0].ident == "stringify" {
-                self.0 = Some(mac.tts.clone());
+                self.0 = Some(mac.tokens.clone());
             }
         }
     }

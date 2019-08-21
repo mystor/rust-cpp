@@ -573,31 +573,31 @@ impl<'ast> Visit<'ast> for Parser {
 
         // Determine the path of the inner module's file
         for attr in &item.attrs {
-            match attr.interpret_meta() {
+            match attr.parse_meta() {
                 // parse #[path = "foo.rs"]: read module from the specified path
-                Some(syn::Meta::NameValue(syn::MetaNameValue {
-                    ident: ref id,
+                Ok(syn::Meta::NameValue(syn::MetaNameValue {
+                    ref path,
                     lit: syn::Lit::Str(ref s),
                     ..
-                })) if id == "path" => {
+                })) if path.is_ident("path") => {
                     let mod_path = self.mod_dir.join(&s.value());
                     return self
                         .parse_mod(mod_path)
                         .unwrap_or_else(|err| self.mod_error = Some(err));
                 }
                 // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
-                Some(syn::Meta::List(syn::MetaList {
-                    ident: ref id,
-                    nested: ref nesteds,
+                Ok(syn::Meta::List(syn::MetaList {
+                    ref path,
+                    ref nested,
                     ..
-                })) if id == "cfg" => {
-                    for nested in nesteds {
-                        match nested {
+                })) if path.is_ident("cfg") => {
+                    for n in nested {
+                        match n {
                             syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
-                                ident: cfg_id,
+                                path,
                                 lit: syn::Lit::Str(feature),
                                 ..
-                            })) if cfg_id == "feature" => {
+                            })) if path.is_ident("feature") => {
                                 let feature_env_var = "CARGO_FEATURE_".to_owned()
                                     + &feature.value().to_uppercase().replace("-", "_");
                                 if std::env::var_os(feature_env_var).is_none() {

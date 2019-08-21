@@ -194,12 +194,12 @@ impl Class {
     pub fn derives(&self, i: &str) -> bool {
         self.attrs.iter().any(|x| {
             use syn::{Meta, NestedMeta};
-            x.interpret_meta().map_or(false, |m| {
+            x.parse_meta().ok().map_or(false, |m| {
                 if let Meta::List(ref list) = m {
-                    list.ident == "derive"
+                    list.path.is_ident("derive")
                         && list.nested.iter().any(|y| {
-                            if let NestedMeta::Meta(Meta::Word(ref d)) = y {
-                                d == i
+                            if let NestedMeta::Meta(Meta::Path(p)) = y {
+                                p.is_ident(i)
                             } else {
                                 false
                             }
