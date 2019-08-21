@@ -1,6 +1,5 @@
 use super::A;
 
-
 #[test]
 fn destructor() {
     unsafe {
@@ -26,16 +25,16 @@ fn destructor() {
 
 #[test]
 fn member_function() {
-    let mut a = A::new(2,3);
-    assert_eq!(a.multiply(), 2*3);
+    let mut a = A::new(2, 3);
+    assert_eq!(a.multiply(), 2 * 3);
 
-    a.set_values(5,6);
-    assert_eq!(a.multiply(), 5*6);
+    a.set_values(5, 6);
+    assert_eq!(a.multiply(), 5 * 6);
 }
 
 cpp_class!(pub(crate) unsafe struct B as "B");
 impl B {
-    fn new(a : i32, b: i32) -> Self {
+    fn new(a: i32, b: i32) -> Self {
         unsafe {
             return cpp!([a as "int", b as "int"] -> B as "B" {
                 B ret = { a, b };
@@ -59,10 +58,9 @@ impl B {
     }
 }
 
-
 #[test]
 fn simple_class() {
-    let mut b = B::new(12,34);
+    let mut b = B::new(12, 34);
     assert_eq!(*b.a(), 12);
     assert_eq!(*b.b(), 34);
     *b.a() = 45;
@@ -87,19 +85,21 @@ fn move_only() {
         }
     }
     let mo1 = MoveOnly::default();
-    assert_eq!(mo1.data().multiply(), 8*9);
+    assert_eq!(mo1.data().multiply(), 8 * 9);
     let mut mo2 = mo1;
-    let mo3 = unsafe { cpp!([mut mo2 as "MoveOnly"] -> MoveOnly as "MoveOnly" {
-        mo2.data.a = 7;
-        return MoveOnly(3,2);
-    })};
-    assert_eq!(mo2.data().multiply(), 7*9);
-    assert_eq!(mo3.data().multiply(), 3*2);
+    let mo3 = unsafe {
+        cpp!([mut mo2 as "MoveOnly"] -> MoveOnly as "MoveOnly" {
+            mo2.data.a = 7;
+            return MoveOnly(3,2);
+        })
+    };
+    assert_eq!(mo2.data().multiply(), 7 * 9);
+    assert_eq!(mo3.data().multiply(), 3 * 2);
 }
 
 #[test]
 fn derive_eq() {
-    cpp!{{
+    cpp! {{
         struct WithOpEq {
             static int val;
             int value = val++;
@@ -122,7 +122,7 @@ fn derive_eq() {
 
 #[test]
 fn derive_ord() {
-    cpp!{{
+    cpp! {{
         struct Comp {
             int value;
             Comp(int i) : value(i) { }
@@ -132,7 +132,9 @@ fn derive_ord() {
     }};
     cpp_class!(#[derive(PartialEq, PartialOrd)] #[derive(Eq, Ord)] unsafe struct Comp as "Comp");
     impl Comp {
-        fn new(i : u32) -> Comp { unsafe { cpp!([i as "int"] -> Comp as "Comp" { return i; }) } }
+        fn new(i: u32) -> Comp {
+            unsafe { cpp!([i as "int"] -> Comp as "Comp" { return i; }) }
+        }
     }
 
     let x1 = Comp::new(1);
@@ -153,4 +155,3 @@ fn derive_ord() {
     assert!(!(x3 < x3));
     assert!(!(x2 >= x3));
 }
-
