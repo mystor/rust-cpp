@@ -260,7 +260,7 @@ cpp!{{
       public:
         TraitPtr m_trait;
         int computeValue(int x) const /*override*/ {
-           return rust!(MCI_computeValue [m_trait : &MyTrait as "TraitPtr", x : i32 as "int"]
+           return rust!(MCI_computeValue [m_trait : &dyn MyTrait as "TraitPtr", x : i32 as "int"]
                -> i32 as "int" {
                m_trait.compute_value(x)
            });
@@ -278,7 +278,7 @@ impl MyTrait for MyTraitImpl {
 #[test]
 fn rust_submacro_trait() {
     let inst = MyTraitImpl{ x: 333 };
-    let inst_ptr : &MyTrait = &inst;
+    let inst_ptr : &dyn MyTrait = &inst;
     let i = unsafe { cpp!([inst_ptr as "TraitPtr"] -> u32 as "int" {
         MyClassImpl mci;
         mci.m_trait = inst_ptr;

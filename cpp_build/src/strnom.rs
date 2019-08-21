@@ -106,7 +106,7 @@ pub fn whitespace(input: Cursor) -> PResult<()> {
             }
         }
         match bytes[i] {
-            b' ' | 0x09...0x0d => {
+            b' ' | 0x09..=0x0d => {
                 i += 1;
                 continue;
             }
@@ -393,8 +393,8 @@ fn backslash_x_char<I>(chars: &mut I) -> bool
 where
     I: Iterator<Item = (usize, char)>,
 {
-    next_ch!(chars @ '0'...'7');
-    next_ch!(chars @ '0'...'9' | 'a'...'f' | 'A'...'F');
+    next_ch!(chars @ '0'..='7');
+    next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F');
     true
 }
 
@@ -402,8 +402,8 @@ fn backslash_x_byte<I>(chars: &mut I) -> bool
 where
     I: Iterator<Item = (usize, u8)>,
 {
-    next_ch!(chars @ b'0'...b'9' | b'a'...b'f' | b'A'...b'F');
-    next_ch!(chars @ b'0'...b'9' | b'a'...b'f' | b'A'...b'F');
+    next_ch!(chars @ b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F');
+    next_ch!(chars @ b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F');
     true
 }
 
@@ -412,9 +412,9 @@ where
     I: Iterator<Item = (usize, char)>,
 {
     next_ch!(chars @ '{');
-    next_ch!(chars @ '0'...'9' | 'a'...'f' | 'A'...'F');
+    next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F');
     loop {
-        let c = next_ch!(chars @ '0'...'9' | 'a'...'f' | 'A'...'F' | '_' | '}');
+        let c = next_ch!(chars @ '0'..='9' | 'a'..='f' | 'A'..='F' | '_' | '}');
         if c == '}' {
             return true;
         }
