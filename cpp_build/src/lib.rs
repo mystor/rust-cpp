@@ -20,11 +20,11 @@ extern crate lazy_static;
 mod strnom;
 
 use cpp_common::*;
+use std::collections::hash_map::{Entry, HashMap};
 use std::env;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use std::collections::hash_map::{HashMap, Entry};
 
 mod parser;
 
@@ -190,8 +190,10 @@ extern "C" {{
                 } else {
                     continue;
                 }
-            },
-            Entry::Vacant(e) => { e.insert(sig); }
+            }
+            Entry::Vacant(e) => {
+                e.insert(sig);
+            }
         }
 
         let is_void = cpp == "void";
@@ -235,7 +237,8 @@ extern "C" {{
                         format!("{} const& {}", cpp, name)
                     }
                 },
-            ).collect::<Vec<_>>()
+            )
+            .collect::<Vec<_>>()
             .join(", ");
 
         if is_void {
@@ -299,7 +302,8 @@ void {name}({params}{comma} void* __result) {{
             line = class.line,
             hash = hash,
             cpp_name = class.cpp
-        ).unwrap();
+        )
+        .unwrap();
 
         if class.derives("PartialEq") {
             write!(output,
@@ -420,7 +424,9 @@ pub struct Config {
 }
 
 impl Default for Config {
-    fn default() -> Self { Config::new() }
+    fn default() -> Self {
+        Config::new()
+    }
 }
 
 impl Config {

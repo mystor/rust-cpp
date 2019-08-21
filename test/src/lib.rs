@@ -1,4 +1,4 @@
-#![recursion_limit="512"]
+#![recursion_limit = "512"]
 #![cfg_attr(not(test), allow(dead_code, unused_imports))]
 
 #[macro_use]
@@ -30,7 +30,7 @@ fn add_two(x: i32) -> i32 {
 
 mod examples;
 
-cpp!{{
+cpp! {{
     #define _USE_MATH_DEFINES
     #include <math.h>
     #include "src/header.h"
@@ -56,7 +56,7 @@ cpp_class!(
     pub unsafe struct A as "A");
 
 impl A {
-    fn new(a : i32, b: i32) -> Self {
+    fn new(a: i32, b: i32) -> Self {
         unsafe {
             return cpp!([a as "int", b as "int"] -> A as "A" {
                 return A(a, b);
@@ -64,7 +64,7 @@ impl A {
         }
     }
 
-    fn set_values(&mut self, a : i32, b: i32) {
+    fn set_values(&mut self, a: i32, b: i32) {
         unsafe {
             return cpp!([self as "A*", a as "int", b as "int"] {
                 self->setValues(a, b);
@@ -81,7 +81,7 @@ impl A {
     }
 }
 
-cpp!{{
+cpp! {{
     bool callRust3(const A &a, int val)  {
         A a2 = rust!(ACallback [a : A as "A", val : i32 as "int"] -> A as "A"
         {
@@ -122,7 +122,6 @@ cpp!{{
     }
 }}
 
-
 #[test]
 fn captures() {
     let x: i32 = 10;
@@ -152,16 +151,20 @@ fn no_captures() {
 fn duplicates() {
     // Test that we can call two captures with the same tokens
 
-    let fn1 = |x| cpp!{ unsafe [x as "int"] -> i32 as "int" {
-        static int sta;
-        sta += x;
-        return sta;
-    }};
-    let fn2 = |x| cpp!{ unsafe [x as "int"] -> i32 as "int" {
-        static int sta;
-        sta += x;
-        return sta;
-    }};
+    let fn1 = |x| {
+        cpp! { unsafe [x as "int"] -> i32 as "int" {
+            static int sta;
+            sta += x;
+            return sta;
+        }}
+    };
+    let fn2 = |x| {
+        cpp! { unsafe [x as "int"] -> i32 as "int" {
+            static int sta;
+            sta += x;
+            return sta;
+        }}
+    };
     assert_eq!(fn1(8), 8);
     assert_eq!(fn1(2), 10);
 
@@ -220,34 +223,39 @@ fn rust_submacro() {
     let result = unsafe { cpp!([] -> i32 as "int" { return callRust1(45); }) };
     assert_eq!(result, 47); // callRust1 adds 2
 
-    let mut val : u32 = 18;
+    let mut val: u32 = 18;
     {
         let val_ref = &mut val;
-        let result = unsafe { cpp!([val_ref as "void*"] -> bool as "bool" {
-            return callRust2(val_ref) == val_ref;
-        }) };
+        let result = unsafe {
+            cpp!([val_ref as "void*"] -> bool as "bool" {
+                return callRust2(val_ref) == val_ref;
+            })
+        };
         assert_eq!(result, true);
     }
     assert_eq!(val, 21); // callRust2 does +=3
 
-    let result = unsafe { cpp!([]->bool as "bool" {
-        A a(5, 3);
-        return callRust3(a, 18);
-    })};
+    let result = unsafe {
+        cpp!([]->bool as "bool" {
+            A a(5, 3);
+            return callRust3(a, 18);
+        })
+    };
     assert!(result);
 
-    let result = unsafe { cpp!([]->u32 as "int" {
-        return manyOtherTest();
-    })};
+    let result = unsafe {
+        cpp!([]->u32 as "int" {
+            return manyOtherTest();
+        })
+    };
     assert_eq!(result, 0);
 }
 
-
 pub trait MyTrait {
-    fn compute_value(&self, x : i32) -> i32;
+    fn compute_value(&self, x: i32) -> i32;
 }
 
-cpp!{{
+cpp! {{
     struct MyClass {
         virtual int computeValue(int) const = 0;
     };
@@ -255,7 +263,7 @@ cpp!{{
 
     struct TraitPtr { void *a,*b; };
 }}
-cpp!{{
+cpp! {{
     class MyClassImpl : public MyClass {
       public:
         TraitPtr m_trait;
@@ -269,52 +277,64 @@ cpp!{{
 }}
 
 struct MyTraitImpl {
-    x : i32
+    x: i32,
 }
 impl MyTrait for MyTraitImpl {
-    fn compute_value(&self, x: i32) -> i32 { self.x + x }
+    fn compute_value(&self, x: i32) -> i32 {
+        self.x + x
+    }
 }
 
 #[test]
 fn rust_submacro_trait() {
-    let inst = MyTraitImpl{ x: 333 };
-    let inst_ptr : &dyn MyTrait = &inst;
-    let i = unsafe { cpp!([inst_ptr as "TraitPtr"] -> u32 as "int" {
-        MyClassImpl mci;
-        mci.m_trait = inst_ptr;
-        return operate123(&mci);
-    })};
+    let inst = MyTraitImpl { x: 333 };
+    let inst_ptr: &dyn MyTrait = &inst;
+    let i = unsafe {
+        cpp!([inst_ptr as "TraitPtr"] -> u32 as "int" {
+            MyClassImpl mci;
+            mci.m_trait = inst_ptr;
+            return operate123(&mci);
+        })
+    };
     assert_eq!(i, 123 + 333);
 }
 
 #[test]
 fn witin_macro() {
     assert_eq!(unsafe { cpp!([] -> u32 as "int" { return 12; }) }, 12);
-    let s = format!("hello{}", unsafe { cpp!([] -> u32 as "int" { return 14; }) } );
+    let s = format!("hello{}", unsafe {
+        cpp!([] -> u32 as "int" { return 14; })
+    });
     assert_eq!(s, "hello14");
 }
 
 #[test]
 fn with_unsafe() {
     let x = 45;
-    assert_eq!(cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }), 46);
+    assert_eq!(
+        cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }),
+        46
+    );
 }
 
 #[test]
 fn rust_submacro_closure() {
-    let mut result = unsafe { cpp!([] -> i32 as "int" {
-        auto x = rust!(bbb []-> A as "A" { A::new(5,7) }).multiply();
-        auto y = []{ A a(3,2); return rust!(aaa [a : A as "A"] -> i32 as "int" { a.multiply() }); }();
-        return x + y;
-    })};
-    assert_eq!(result, 5*7+3*2);
+    let mut result = unsafe {
+        cpp!([] -> i32 as "int" {
+            auto x = rust!(bbb []-> A as "A" { A::new(5,7) }).multiply();
+            auto y = []{ A a(3,2); return rust!(aaa [a : A as "A"] -> i32 as "int" { a.multiply() }); }();
+            return x + y;
+        })
+    };
+    assert_eq!(result, 5 * 7 + 3 * 2);
 
-    unsafe { cpp!([mut result as "int"] {
-        A a(9,2);
-        rust!(Ccc [a : A as "A", result : &mut i32 as "int&"] { *result = a.multiply(); });
-    })};
+    unsafe {
+        cpp!([mut result as "int"] {
+            A a(9,2);
+            rust!(Ccc [a : A as "A", result : &mut i32 as "int&"] { *result = a.multiply(); });
+        })
+    };
     assert_eq!(result, 18);
-
 }
 
 pub mod cpp_class;

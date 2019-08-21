@@ -271,11 +271,10 @@ fn test_skip_literal() -> Result<(), LexError> {
 
     assert!((skip_whitespace(new_cursor("ok xx"))).starts_with("ok"));
     assert!((skip_whitespace(new_cursor("   ok xx"))).starts_with("ok"));
-    assert!(
-        (skip_whitespace(new_cursor(
-            " \n /*  /*dd \n // */ */ // foo \n    ok xx/* */"
-        ))).starts_with("ok")
-    );
+    assert!((skip_whitespace(new_cursor(
+        " \n /*  /*dd \n // */ */ // foo \n    ok xx/* */"
+    )))
+    .starts_with("ok"));
 
     Ok(())
 }
@@ -509,10 +508,12 @@ impl Parser {
         match ::syn::parse2::<Macro>(input).map_err(|e| LineError(x.line, e.to_string()))? {
             Macro::Closure(mut c) => {
                 c.callback_offset = self.callbacks_count;
-                c.body_str = line_directive(&self.current_path, begin) + &expand_sub_rust_macro(
-                    extracted.to_string(),
-                    ExpandSubMacroType::Closure(&mut self.callbacks_count),
-                ).map_err(|e| e.add_line(begin.line))?;
+                c.body_str = line_directive(&self.current_path, begin)
+                    + &expand_sub_rust_macro(
+                        extracted.to_string(),
+                        ExpandSubMacroType::Closure(&mut self.callbacks_count),
+                    )
+                    .map_err(|e| e.add_line(begin.line))?;
                 self.closures.push(c);
             }
             Macro::Lit(_l) => {
@@ -520,7 +521,8 @@ impl Parser {
                 let snip = expand_sub_rust_macro(
                     line_directive(&self.current_path, begin) + extracted,
                     ExpandSubMacroType::Lit,
-                ).map_err(|e| e.add_line(begin.line))?;
+                )
+                .map_err(|e| e.add_line(begin.line))?;
                 self.snippets.push_str(&snip);
             }
         }
@@ -577,32 +579,27 @@ impl<'ast> Visit<'ast> for Parser {
                     ident: ref id,
                     lit: syn::Lit::Str(ref s),
                     ..
-                }))
-                    if id == "path" =>
-                {
+                })) if id == "path" => {
                     let mod_path = self.mod_dir.join(&s.value());
                     return self
                         .parse_mod(mod_path)
                         .unwrap_or_else(|err| self.mod_error = Some(err));
-                },
+                }
                 // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
                 Some(syn::Meta::List(syn::MetaList {
                     ident: ref id,
                     nested: ref nesteds,
                     ..
-                }))
-                    if id == "cfg" =>
-                {
+                })) if id == "cfg" => {
                     for nested in nesteds {
                         match nested {
                             syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
                                 ident: cfg_id,
                                 lit: syn::Lit::Str(feature),
                                 ..
-                            }))
-                                if cfg_id == "feature" =>
-                            {
-                                let feature_env_var = "CARGO_FEATURE_".to_owned() + &feature.value().to_uppercase().replace("-", "_");
+                            })) if cfg_id == "feature" => {
+                                let feature_env_var = "CARGO_FEATURE_".to_owned()
+                                    + &feature.value().to_uppercase().replace("-", "_");
                                 if std::env::var_os(feature_env_var).is_none() {
                                     return;
                                 }
@@ -610,7 +607,7 @@ impl<'ast> Visit<'ast> for Parser {
                             _ => {}
                         }
                     }
-                },
+                }
                 _ => {}
             }
         }
