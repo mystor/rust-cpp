@@ -37,6 +37,8 @@ cpp! {{
     #include <map>
     #include <iostream>
 
+    int global_int;
+
     int callRust1(int x)  {
         return rust!(addTwoCallback [x : i32 as "int"] -> i32 as "int" { add_two(x) });
     }
@@ -139,12 +141,14 @@ fn captures() {
 
 #[test]
 fn no_captures() {
+    cpp! {unsafe [] { global_int = 33; }};
+
     let x = unsafe {
         cpp![[] -> i32 as "int" {
-            return 10;
+            return 10 + global_int;
         }]
     };
-    assert_eq!(x, 10);
+    assert_eq!(x, 43);
 }
 
 #[test]
