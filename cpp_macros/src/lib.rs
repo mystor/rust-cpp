@@ -7,22 +7,8 @@
 
 #[macro_use]
 extern crate syn;
-
-#[macro_use]
-extern crate quote;
-
-extern crate cpp_common;
-
 extern crate proc_macro;
-extern crate proc_macro2;
 use proc_macro2::Span;
-
-#[macro_use]
-extern crate lazy_static;
-
-extern crate aho_corasick;
-
-extern crate byteorder;
 
 use cpp_common::{flags, kw, RustInvocation, FILE_HASH, LIB_NAME, MSVC_LIB_NAME, OUT_DIR, VERSION};
 use std::collections::HashMap;
@@ -30,9 +16,10 @@ use std::iter::FromIterator;
 use syn::parse::Parser;
 use syn::Ident;
 
-use aho_corasick::{AcAutomaton, Automaton};
 use byteorder::{LittleEndian, ReadBytesExt};
 use if_rust_version::if_rust_version;
+use lazy_static::lazy_static;
+use quote::{quote, quote_spanned};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
 
@@ -84,15 +71,15 @@ fn read_metadata(file: File) -> io::Result<HashMap<u64, Vec<MetaData>>> {
     let mut file = BufReader::new(file);
     let end = {
         const AUTO_KEYWORD: &[&[u8]] = &[&cpp_common::STRUCT_METADATA_MAGIC];
-        let aut = AcAutomaton::new(AUTO_KEYWORD);
-        let found = aut.stream_find(&mut file).next().expect(
+        let aut = aho_corasick::AhoCorasick::new(AUTO_KEYWORD);
+        let found = aut.stream_find_iter(&mut file).next().expect(
             r#"
 -- rust-cpp fatal error --
 
 Struct metadata not present in target library file.
 NOTE: Double-check that the version of cpp_build and cpp_macros match"#,
         )?;
-        found.end
+        found.end()
     };
     file.seek(SeekFrom::Start(end as u64))?;
 

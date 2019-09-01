@@ -23,7 +23,7 @@ cpp_common = { path = "../cpp_common", version = "=0.5.3" }
 syn = { version = "1.0", features=["full", "visit"] }
 proc-macro2 = "1.0"
 regex = "1"
-unicode-xid = "0.1"
+unicode-xid = "0.2"
 
 [package.metadata.docs.rs]
 features = [ "docs-only" ]
