@@ -9,7 +9,7 @@
 //! crate
 //! |-- Cargo.toml
 //! |-- src
-//!     |-- lib.rs
+//!     |-- main.rs
 //! |-- build.rs
 //! ```
 //!
@@ -34,11 +34,11 @@
 //! extern crate cpp_build;
 //!
 //! fn main() {
-//!     cpp_build::build("src/lib.rs");
+//!     cpp_build::build("src/main.rs");
 //! }
 //! ```
 //!
-//! #### lib.rs
+//! #### main.rs
 //!
 //! ```ignore
 //! # // tested in test/src/examples.rs
