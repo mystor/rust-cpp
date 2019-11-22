@@ -42,8 +42,7 @@
 //!
 //! ```ignore
 //! # // tested in test/src/examples.rs
-//! #[macro_use]
-//! extern crate cpp;
+//! use cpp::cpp;
 //!
 //! cpp!{{
 //!     #include <iostream>
@@ -118,17 +117,17 @@ pub use cpp_macros::*;
 #[macro_export]
 macro_rules! __cpp_internal {
     (@find_rust_macro [$($a:tt)*] rust!($($rust_body:tt)*) $($rest:tt)*) => {
-        __cpp_internal!{ @expand_rust_macro [$($a)*] $($rust_body)* }
-        __cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* }
+        $crate::__cpp_internal!{ @expand_rust_macro [$($a)*] $($rust_body)* }
+        $crate::__cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* }
     };
     (@find_rust_macro [$($a:tt)*] ( $($in:tt)* ) $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+        { $crate::__cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
     (@find_rust_macro [$($a:tt)*] [ $($in:tt)* ] $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+        { $crate::__cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
     (@find_rust_macro [$($a:tt)*] { $($in:tt)* } $($rest:tt)* ) =>
-        { __cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
+        { $crate::__cpp_internal!{ @find_rust_macro [$($a)*] $($in)* $($rest)* }  };
     (@find_rust_macro [$($a:tt)*] $t:tt $($rest:tt)*) =>
-        { __cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* } };
+        { $crate::__cpp_internal!{ @find_rust_macro [$($a)*] $($rest)* } };
     (@find_rust_macro [$($a:tt)*]) => {};
 
     (@expand_rust_macro [$($a:tt)*] $i:ident [$($an:ident : $at:ty as $ac:tt),*] {$($body:tt)*}) => {
@@ -242,14 +241,14 @@ macro_rules! __cpp_internal {
 #[macro_export]
 macro_rules! cpp {
     // raw text inclusion
-    ({$($body:tt)*}) => { __cpp_internal!{ @find_rust_macro [#[no_mangle] pub] $($body)*} };
+    ({$($body:tt)*}) => { $crate::__cpp_internal!{ @find_rust_macro [#[no_mangle] pub] $($body)*} };
 
     // inline closure
     ([$($captures:tt)*] $($rest:tt)*) => {
         {
-            __cpp_internal!{ @find_rust_macro [] $($rest)*}
+            $crate::__cpp_internal!{ @find_rust_macro [] $($rest)*}
             #[allow(unused)]
-            #[derive(__cpp_internal_closure)]
+            #[derive($crate::__cpp_internal_closure)]
             enum CppClosureInput {
                 Input = (stringify!([$($captures)*] $($rest)*), 0).1
             }
@@ -338,13 +337,13 @@ pub trait CppTrait {
 #[macro_export]
 macro_rules! cpp_class {
     ($(#[$($attrs:tt)*])* unsafe struct $name:ident as $type:expr) => {
-        __cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [] [unsafe struct $name as $type] }
+        $crate::__cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [] [unsafe struct $name as $type] }
     };
     ($(#[$($attrs:tt)*])* pub unsafe struct $name:ident as $type:expr) => {
-        __cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub] [unsafe struct $name as $type] }
+        $crate::__cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub] [unsafe struct $name as $type] }
     };
     ($(#[$($attrs:tt)*])* pub($($pub:tt)*) unsafe struct $name:ident as $type:expr) => {
-        __cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub($($pub)*)] [unsafe struct $name as $type] }
+        $crate::__cpp_class_internal!{@parse [ $(#[$($attrs)*])* ] [pub($($pub)*)] [unsafe struct $name as $type] }
     };
 }
 
@@ -353,8 +352,8 @@ macro_rules! cpp_class {
 #[macro_export]
 macro_rules! __cpp_class_internal {
     (@parse [$($attrs:tt)*] [$($vis:tt)*] [unsafe struct $name:ident as $type:expr]) => {
-        __cpp_class_internal!{@parse_attributes [ $($attrs)* ] [] [
-            #[derive(__cpp_internal_class)]
+        $crate::__cpp_class_internal!{@parse_attributes [ $($attrs)* ] [] [
+            #[derive($crate::__cpp_internal_class)]
             #[repr(C)]
             $($vis)* struct $name {
                 _opaque : [<$name as $crate::CppTrait>::BaseType ; <$name as $crate::CppTrait>::ARRAY_SIZE
@@ -365,23 +364,23 @@ macro_rules! __cpp_class_internal {
 
     (@parse_attributes [] [$($attributes:tt)*] [$($result:tt)*]) => ( $($attributes)* $($result)* );
     (@parse_attributes [#[derive($($der:ident),*)] $($tail:tt)* ] [$($attributes:tt)*] [$($result:tt)*] )
-        => (__cpp_class_internal!{@parse_derive [$($der),*] @parse_attributes [$($tail)*] [ $($attributes)* ] [ $($result)* ] } );
+        => ($crate::__cpp_class_internal!{@parse_derive [$($der),*] @parse_attributes [$($tail)*] [ $($attributes)* ] [ $($result)* ] } );
     (@parse_attributes [ #[$m:meta] $($tail:tt)* ] [$($attributes:tt)*] [$($result:tt)*])
-        => (__cpp_class_internal!{@parse_attributes [$($tail)*] [$($attributes)* #[$m] ] [ $($result)* ] } );
+        => ($crate::__cpp_class_internal!{@parse_attributes [$($tail)*] [$($attributes)* #[$m] ] [ $($result)* ] } );
 
-    (@parse_derive [] @parse_attributes $($result:tt)*) => (__cpp_class_internal!{@parse_attributes $($result)*} );
+    (@parse_derive [] @parse_attributes $($result:tt)*) => ($crate::__cpp_class_internal!{@parse_attributes $($result)*} );
     (@parse_derive [PartialEq $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [PartialOrd $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [Ord $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [Default $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [Clone $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [Copy $(,$tail:ident)*] $($result:tt)*)
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] $($result)*} );
     (@parse_derive [$i:ident $(,$tail:ident)*] @parse_attributes [$($attr:tt)*] [$($attributes:tt)*] [$($result:tt)*] )
-        => ( __cpp_class_internal!{@parse_derive [$($tail),*] @parse_attributes [$($attr)*] [$($attributes)* #[derive($i)] ] [ $($result)* ] } );
+        => ( $crate::__cpp_class_internal!{@parse_derive [$($tail),*] @parse_attributes [$($attr)*] [$($attributes)* #[derive($i)] ] [ $($result)* ] } );
 }

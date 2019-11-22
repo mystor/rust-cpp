@@ -1,3 +1,5 @@
+use cpp::cpp;
+
 pub fn nomod_inner() -> i32 {
     unsafe {
         let nomod_inner: i32 = 10;

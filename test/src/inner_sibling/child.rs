@@ -1,3 +1,5 @@
+use cpp::cpp;
+
 pub fn inner_sibling_child() -> i32 {
     unsafe {
         let x_c: i32 = 20;

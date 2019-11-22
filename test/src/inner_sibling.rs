@@ -1,3 +1,5 @@
+use cpp::cpp;
+
 pub mod child;
 
 pub fn inner_sibling() -> i32 {

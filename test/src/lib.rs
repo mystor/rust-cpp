@@ -1,8 +1,7 @@
 #![recursion_limit = "512"]
 #![cfg_attr(not(test), allow(dead_code, unused_imports))]
 
-#[macro_use]
-extern crate cpp;
+use cpp::{cpp, cpp_class};
 
 #[cfg(test)]
 mod inner;
