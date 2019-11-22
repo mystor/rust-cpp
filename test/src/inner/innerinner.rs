@@ -1,3 +1,5 @@
+use cpp::cpp;
+
 pub fn innerinner() -> i32 {
     unsafe {
         let im_inner_inner: i32 = 10;

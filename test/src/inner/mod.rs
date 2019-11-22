@@ -1,5 +1,7 @@
 #![cfg_attr(not(test), allow(dead_code, unused_imports))]
 
+use cpp::cpp;
+
 pub mod innerinner;
 
 #[path = "explicit_path.rs"]

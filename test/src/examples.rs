@@ -1,3 +1,5 @@
+use cpp::cpp;
+
 cpp! {{
     #include <iostream>
 }}

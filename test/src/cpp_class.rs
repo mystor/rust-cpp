@@ -1,4 +1,5 @@
 use super::A;
+use cpp::{cpp, cpp_class};
 
 #[test]
 fn destructor() {
