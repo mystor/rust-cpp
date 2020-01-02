@@ -70,7 +70,7 @@
 //!
 //! Behind the scene, it uses the `cc` crate.
 //!
-//! ## Using external liraries
+//! ## Using external libraries
 //!
 //! Most likely you will want to link against external libraries. You need to tell cpp_build
 //! about the include path and other flags via `cpp_build::Config` and you need to let cargo
