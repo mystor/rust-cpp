@@ -32,7 +32,7 @@ impl fmt::Display for Error {
             Error::ParseSyntaxError {
                 ref src_path,
                 ref error,
-            } => write!(f, "Parsing crate:`{}`:\n{:?}", src_path, error),
+            } => write!(f, "Parsing file : `{}`:\n{}", src_path, error),
             Error::LexError {
                 ref src_path,
                 ref line,
@@ -374,7 +374,7 @@ impl Parser {
             })?;
 
         let fi = syn::parse_file(&s).map_err(|x| Error::ParseSyntaxError {
-            src_path: "".to_owned(),
+            src_path: mod_path.as_ref().to_str().unwrap().to_owned(),
             error: x,
         })?;
 
