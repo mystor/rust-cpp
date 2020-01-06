@@ -103,6 +103,14 @@
 //! module into the parsing process. Please note that the latter is only supported
 //! in its simplest form: straight-forward `feature = "..."` without any
 //! additional conditions, `cfg!` macros are also not supported at the moment.
+//!
+//! Since the cpp code is included within a rust file, the C++ code must obey both
+//! the Rust and the C++ lexing rules. For example, Rust supports nested block comments
+//! (`/* ... /* ... */ ... */`) while C++ does not, so nested comments not be used in the
+//! `cpp!` macro. Also the Rust lexer will not understand the C++ raw literal, nor all
+//! the C++ escape sequences within literal, so only string literals that are both valid
+//! in Rust and in C++ should be used. Be careful to properly use `#if` / `#else` / `#endif`,
+//! and not have unbalanced delimiters.
 
 #[macro_use]
 #[allow(unused_imports)]
