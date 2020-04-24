@@ -112,6 +112,8 @@
 //! in Rust and in C++ should be used. Be careful to properly use `#if` / `#else` / `#endif`,
 //! and not have unbalanced delimiters.
 
+#![no_std]
+
 #[macro_use]
 #[allow(unused_imports)]
 extern crate cpp_macros;
