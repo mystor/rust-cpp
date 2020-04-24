@@ -149,7 +149,7 @@ macro_rules! __cpp_internal {
         $($a)* unsafe extern "C" fn $i($($an : *const $at),*) {
             $(let $an : $at = unsafe { $an.read() };)*
             (|| { $($body)* })();
-            $(::std::mem::forget($an);)*
+            $(::core::mem::forget($an);)*
 
         }
     };
@@ -165,9 +165,9 @@ macro_rules! __cpp_internal {
             {
                 #[allow(unused_mut)]
                 let mut lambda = || {$($body)*};
-                unsafe { ::std::ptr::write(rt, lambda()) };
+                unsafe { ::core::ptr::write(rt, lambda()) };
             }
-            $(::std::mem::forget($an);)*
+            $(::core::mem::forget($an);)*
             rt
         }
     };
