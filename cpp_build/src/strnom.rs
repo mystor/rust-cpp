@@ -31,7 +31,7 @@ impl<'a> Cursor<'a> {
                 + self.rest[..amt]
                     .char_indices()
                     .filter(|&(_, ref x)| *x == '\n')
-                    .map(|(i, _)| column_start = Some(i))
+                    .filter(|(i, _)| { column_start = Some(*i); true } )
                     .count() as u32,
             column: match column_start {
                 None => self.column + (amt as u32),

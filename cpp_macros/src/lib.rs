@@ -173,6 +173,7 @@ fn extract_original_macro(input: &syn::DeriveInput) -> Option<proc_macro2::Token
 }
 
 #[proc_macro_derive(__cpp_internal_closure)]
+#[allow(clippy::cognitive_complexity)]
 pub fn expand_internal(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     assert_eq!(
         env!("CARGO_PKG_VERSION"),
