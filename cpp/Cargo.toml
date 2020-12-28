@@ -1,6 +1,6 @@
 [package]
 name = "cpp"
-version = "0.5.5"
+version = "0.5.6"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 edition = "2018"
 description = "Inline C++ code closures"
@@ -12,7 +12,7 @@ repository = "https://github.com/mystor/rust-cpp"
 documentation = "https://docs.rs/cpp"
 
 [dependencies]
-cpp_macros = { version = "=0.5.5", path = "../cpp_macros" }
+cpp_macros = { version = "=0.5.6", path = "../cpp_macros" }
 
 [dev-dependencies]
-cpp_build = { version = "=0.5.5", path = "../cpp_build" }
+cpp_build = { version = "=0.5.6", path = "../cpp_build" }
