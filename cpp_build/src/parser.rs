@@ -4,7 +4,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::mem::swap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use syn;
 use syn::visit::Visit;
 
@@ -359,27 +359,31 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn parse_crate<P: AsRef<Path>>(&mut self, crate_root: P) -> Result<(), Error> {
-        self.parse_mod(crate_root)
+    pub fn parse_crate(&mut self, crate_root: PathBuf) -> Result<(), Error> {
+        let parent = crate_root
+            .parent()
+            .map(|x| x.to_owned())
+            .unwrap_or_default();
+        self.parse_mod(crate_root, parent)
     }
 
-    fn parse_mod<P: AsRef<Path>>(&mut self, mod_path: P) -> Result<(), Error> {
+    fn parse_mod(&mut self, mod_path: PathBuf, submod_dir: PathBuf) -> Result<(), Error> {
         let mut s = String::new();
         let mut f = File::open(&mod_path).map_err(|_| Error::ParseCannotOpenFile {
-            src_path: mod_path.as_ref().to_str().unwrap().to_owned(),
+            src_path: mod_path.to_str().unwrap().to_owned(),
         })?;
         f.read_to_string(&mut s)
             .map_err(|_| Error::ParseCannotOpenFile {
-                src_path: mod_path.as_ref().to_str().unwrap().to_owned(),
+                src_path: mod_path.to_str().unwrap().to_owned(),
             })?;
 
         let fi = syn::parse_file(&s).map_err(|x| Error::ParseSyntaxError {
-            src_path: mod_path.as_ref().to_str().unwrap().to_owned(),
+            src_path: mod_path.to_str().unwrap().to_owned(),
             error: x,
         })?;
 
-        let mut current_path = mod_path.as_ref().into();
-        let mut mod_dir = mod_path.as_ref().parent().unwrap().into();
+        let mut current_path = mod_path;
+        let mut mod_dir = submod_dir;
 
         swap(&mut self.current_path, &mut current_path);
         swap(&mut self.mod_dir, &mut mod_dir);
@@ -581,8 +585,13 @@ impl<'ast> Visit<'ast> for Parser {
                     ..
                 })) if path.is_ident("path") => {
                     let mod_path = self.mod_dir.join(&s.value());
+                    let parent = self
+                        .mod_dir
+                        .parent()
+                        .map(|x| x.to_owned())
+                        .unwrap_or_default();
                     return self
-                        .parse_mod(mod_path)
+                        .parse_mod(mod_path, parent)
                         .unwrap_or_else(|err| self.mod_error = Some(err));
                 }
                 // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
@@ -613,30 +622,18 @@ impl<'ast> Visit<'ast> for Parser {
         }
 
         let mod_name = item.ident.to_string();
-        let mut subdir = self.mod_dir.join(mod_name.clone());
-        subdir.push("mod.rs");
-        if subdir.is_file() {
+        let subdir = self.mod_dir.join(&mod_name);
+        let subdir_mod = subdir.join("mod.rs");
+        if subdir_mod.is_file() {
             return self
-                .parse_mod(subdir)
+                .parse_mod(subdir_mod, subdir)
                 .unwrap_or_else(|err| self.mod_error = Some(err));
-        }
-
-        let mut adjacent_subdir = self.current_path.clone();
-        if let Some(cur_mod_dir) = adjacent_subdir.file_stem().map(|x| x.to_owned()) {
-            adjacent_subdir.pop();
-            adjacent_subdir.push(cur_mod_dir);
-            adjacent_subdir.push(format!("{}.rs", mod_name));
-            if adjacent_subdir.is_file() {
-                return self
-                    .parse_mod(adjacent_subdir)
-                    .unwrap_or_else(|err| self.mod_error = Some(err));
-            }
         }
 
         let adjacent = self.mod_dir.join(&format!("{}.rs", mod_name));
         if adjacent.is_file() {
             return self
-                .parse_mod(adjacent)
+                .parse_mod(adjacent, subdir)
                 .unwrap_or_else(|err| self.mod_error = Some(err));
         }
 

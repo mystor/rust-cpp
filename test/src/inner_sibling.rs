@@ -1,6 +1,7 @@
 use cpp::cpp;
 
 pub mod child;
+pub mod child2;
 
 pub fn inner_sibling() -> i32 {
     unsafe {

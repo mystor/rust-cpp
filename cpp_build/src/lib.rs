@@ -646,13 +646,14 @@ impl Config {
 
         // Parse the crate
         let mut visitor = parser::Parser::default();
-        if let Err(err) = visitor.parse_crate(&crate_root) {
-            warnln!(r#"-- rust-cpp parse error --
+        if let Err(err) = visitor.parse_crate(crate_root.as_ref().to_owned()) {
+            warnln!(
+                r#"-- rust-cpp parse error --
 There was an error parsing the crate for the rust-cpp build script:
 {}
 In order to provide a better error message, the build script will exit successfully, such that rustc can provide an error message."#,
-                    err
-                );
+                err
+            );
             return;
         }
 
