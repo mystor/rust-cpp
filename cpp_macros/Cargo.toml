@@ -1,6 +1,6 @@
 [package]
 name = "cpp_macros"
-version = "0.5.4"
+version = "0.5.5"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <ogoffart@woboq.com>"]
 edition = "2018"
 description = "Procedural macro implementation for the `cpp` crate"
@@ -21,11 +21,11 @@ proc-macro = true
 
 [dependencies]
 lazy_static = "1.0"
-cpp_common = { path = "../cpp_common", version = "=0.5.4" }
+cpp_common = { path = "../cpp_common", version = "=0.5.5" }
 syn = { version = "1.0", features=["full", "visit"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-aho-corasick = "0.7"
+aho-corasick = "0.7.15"
 byteorder = "1.0"
 if_rust_version = "1.0"
 

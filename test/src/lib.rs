@@ -193,6 +193,8 @@ fn inner_sibling() {
     assert_eq!(x, 10);
     let y = inner_sibling::child::inner_sibling_child();
     assert_eq!(y, 20);
+    let z = inner_sibling::child2::inner_sibling_child2();
+    assert_eq!(z, -44);
 }
 
 #[test]
