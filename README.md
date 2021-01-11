@@ -21,7 +21,7 @@ let r = unsafe {
 assert_eq!(r, 42)
 ```
 
-The crate also help to expose some C++ class to Rust by autimatically
+The crate also help to expose some C++ class to Rust by automatically
 implementing trait such as Drop, Clone (if the C++ type can be copied), and others
 
 ```rust
