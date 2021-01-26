@@ -359,6 +359,7 @@ struct SizeAlign {{
 struct MetaData {{
     uint8_t magic[128];
     uint8_t version[16];
+    uint64_t endianness_check;
     uint64_t length;
     SizeAlign data[{length}];
 }};
@@ -372,6 +373,7 @@ MetaData
     metadata = {{
     {{ {magic} }},
     "{version}",
+    0xffef,
     {length},
     {{ {data} }}
 }};

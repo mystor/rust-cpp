@@ -16,7 +16,7 @@ use std::iter::FromIterator;
 use syn::parse::Parser;
 use syn::Ident;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt};
 use lazy_static::lazy_static;
 use quote::{quote, quote_spanned};
 use std::fs::File;
@@ -99,14 +99,26 @@ NOTE: Double-check that the version of cpp_build and cpp_macros match"#,
 
 Version mismatch between cpp_macros and cpp_build for same crate."#
     );
+    let endianness_check = file.read_u64::<LittleEndian>()?;
+    if endianness_check == 0xffef {
+        read_metadata_rest::<LittleEndian>(file)
+    } else if endianness_check == 0xefff000000000000 {
+        read_metadata_rest::<BigEndian>(file)
+    } else {
+        panic!("Endianness check value matches neither little nor big endian.");
+    }
+}
 
-    let length = file.read_u64::<LittleEndian>()?;
+fn read_metadata_rest<E: ByteOrder>(mut file: BufReader<File>)
+    -> io::Result<HashMap<u64, Vec<MetaData>>>
+{
+    let length = file.read_u64::<E>()?;
     let mut metadata = HashMap::new();
     for _ in 0..length {
-        let hash = file.read_u64::<LittleEndian>()?;
-        let size = file.read_u64::<LittleEndian>()? as usize;
-        let align = file.read_u64::<LittleEndian>()? as usize;
-        let flags = file.read_u64::<LittleEndian>()? as u64;
+        let hash = file.read_u64::<E>()?;
+        let size = file.read_u64::<E>()? as usize;
+        let align = file.read_u64::<E>()? as usize;
+        let flags = file.read_u64::<E>()? as u64;
 
         metadata
             .entry(hash)
