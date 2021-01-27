@@ -19,7 +19,6 @@ jobs:
           - stable
           - beta
           - nightly
-          - 1.34.0  # MSRV
           - 1.36.0
 
     steps:
