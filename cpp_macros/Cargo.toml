@@ -27,7 +27,6 @@ quote = "1.0"
 proc-macro2 = "1.0"
 aho-corasick = "0.7.15"
 byteorder = "1.0"
-if_rust_version = "1.0"
 
 [package.metadata.docs.rs]
 features = [ "docs-only" ]
