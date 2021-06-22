@@ -365,12 +365,7 @@ struct MetaData {{
 }};
 
 MetaData
-#ifdef _WIN32
-    __declspec (selectany)
-#elif __GNUC__
-    __attribute__((weak))
-#endif
-    metadata = {{
+    metadata_{hash} = {{
     {{ {magic} }},
     "{version}",
     0xffef,
@@ -380,6 +375,7 @@ MetaData
 
 }} // namespace rustcpp
 "#,
+        hash = *FILE_HASH,
         data = sizealign.join(", "),
         length = sizealign.len(),
         magic = magic.join(", "),
