@@ -364,8 +364,7 @@ struct MetaData {{
     SizeAlign data[{length}];
 }};
 
-MetaData
-    metadata_{hash} = {{
+MetaData metadata_{hash} = {{
     {{ {magic} }},
     "{version}",
     0xffef,
