@@ -171,18 +171,15 @@ fn is_whitespace(ch: char) -> bool {
 
 #[inline]
 fn is_ident_start(c: char) -> bool {
-    ('a'..='z').contains(&c)
-        || ('A'..='Z').contains(&c)
+    c.is_ascii_alphabetic()
         || c == '_'
         || (c > '\x7f' && UnicodeXID::is_xid_start(c))
 }
 
 #[inline]
 fn is_ident_continue(c: char) -> bool {
-    ('a'..='z').contains(&c)
-        || ('A'..='Z').contains(&c)
+    c.is_ascii_alphanumeric()
         || c == '_'
-        || ('0'..='9').contains(&c)
         || (c > '\x7f' && UnicodeXID::is_xid_continue(c))
 }
 
