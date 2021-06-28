@@ -51,6 +51,14 @@ cpp! {{
             ptr
         });
     }
+    int callRustExplicitReturn(int x) {
+        return rust!(explicitReturnCallback [x : i32 as "int"] -> i32 as "int" {
+            if x == 0 {
+                return 42;
+            }
+            x + 1
+        });
+    }
 }}
 
 cpp_class!(
@@ -241,6 +249,11 @@ fn rust_submacro() {
         assert_eq!(result, true);
     }
     assert_eq!(val, 21); // callRust2 does +=3
+
+    let result = unsafe { cpp!([] -> i32 as "int" { return callRustExplicitReturn(0); }) };
+    assert_eq!(result, 42);
+    let result = unsafe { cpp!([] -> i32 as "int" { return callRustExplicitReturn(9); }) };
+    assert_eq!(result, 10);
 
     let result = unsafe {
         cpp!([]->bool as "bool" {
