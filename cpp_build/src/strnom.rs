@@ -22,6 +22,7 @@ pub struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
+    #[allow(clippy::suspicious_map)]
     pub fn advance(&self, amt: usize) -> Cursor<'a> {
         let mut column_start: Option<usize> = None;
         Cursor {
@@ -31,7 +32,7 @@ impl<'a> Cursor<'a> {
                 + self.rest[..amt]
                     .char_indices()
                     .filter(|&(_, ref x)| *x == '\n')
-                    .map(|(i, _)| column_start = Some(i))
+                    .map(|(i, _)| { column_start = Some(i); } )
                     .count() as u32,
             column: match column_start {
                 None => self.column + (amt as u32),

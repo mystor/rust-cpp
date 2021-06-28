@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::Read;
 use std::mem::swap;
 use std::path::PathBuf;
-use syn;
 use syn::visit::Visit;
 
 #[derive(Debug)]

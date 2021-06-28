@@ -46,8 +46,10 @@ cpp! {{
         typedef int LocalInt;
         typedef void * VoidStar;
         return rust!(ptrCallback [ptr : *mut u32 as "void*", a : u32 as "LocalInt"]
-            -> *mut u32 as "VoidStar"
-        { unsafe {*ptr += a}; return ptr; });
+                -> *mut u32 as "VoidStar" {
+            unsafe {*ptr += a};
+            ptr
+        });
     }
 }}
 
@@ -112,13 +114,13 @@ cpp! {{
         double fval = 5.5;
         double res = rust!(xx___8 [fval : f64 as "double"] -> f64 as "double" { fval * 1.2 + 9.9 } );
         if (int((res - (5.5 * 1.2 + 9.9)) * 100000) != 0) return 5;
-        res = rust!(xx___9 [fval : &mut f64 as "double&"] -> f64 as "double" { *fval = *fval * 2.2; 8.8 } );
+        res = rust!(xx___9 [fval : &mut f64 as "double&"] -> f64 as "double" { *fval *= 2.2; 8.8 } );
         if (int((res - (8.8)) * 100000) != 0) return 9;
         if (int((fval - (5.5 * 2.2)) * 100000) != 0) return 10;
         // with a class
         A a(3,4);
         rust!(xx___10 [a : A as "A"] { let a2 = a.clone(); assert!(a2.multiply() == 12); } );
-        rust!(xx___11 [a : A as "A"] { let _a = a.clone(); return; } );
+        rust!(xx___11 [a : A as "A"] { let _a = a.clone(); } );
         return 0;
     }
 }}
