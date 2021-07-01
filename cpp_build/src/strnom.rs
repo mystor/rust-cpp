@@ -22,6 +22,7 @@ pub struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
+    #[allow(clippy::suspicious_map)]
     pub fn advance(&self, amt: usize) -> Cursor<'a> {
         let mut column_start: Option<usize> = None;
         Cursor {
@@ -31,7 +32,7 @@ impl<'a> Cursor<'a> {
                 + self.rest[..amt]
                     .char_indices()
                     .filter(|&(_, ref x)| *x == '\n')
-                    .map(|(i, _)| column_start = Some(i))
+                    .map(|(i, _)| { column_start = Some(i); } )
                     .count() as u32,
             column: match column_start {
                 None => self.column + (amt as u32),
@@ -170,18 +171,15 @@ fn is_whitespace(ch: char) -> bool {
 
 #[inline]
 fn is_ident_start(c: char) -> bool {
-    ('a' <= c && c <= 'z')
-        || ('A' <= c && c <= 'Z')
+    c.is_ascii_alphabetic()
         || c == '_'
         || (c > '\x7f' && UnicodeXID::is_xid_start(c))
 }
 
 #[inline]
 fn is_ident_continue(c: char) -> bool {
-    ('a' <= c && c <= 'z')
-        || ('A' <= c && c <= 'Z')
+    c.is_ascii_alphanumeric()
         || c == '_'
-        || ('0' <= c && c <= '9')
         || (c > '\x7f' && UnicodeXID::is_xid_continue(c))
 }
 

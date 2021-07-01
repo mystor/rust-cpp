@@ -4,8 +4,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::mem::swap;
-use std::path::PathBuf;
-use syn;
+use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
 #[derive(Debug)]
@@ -335,7 +334,7 @@ fn test_cursor_advance() -> Result<(), LexError> {
     Ok(())
 }
 
-fn line_directive(path: &PathBuf, cur: Cursor) -> String {
+fn line_directive(path: &Path, cur: Cursor) -> String {
     let mut line = format!(
         "#line {} \"{}\"\n",
         cur.line + 1,

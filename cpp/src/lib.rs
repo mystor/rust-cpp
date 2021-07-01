@@ -1,3 +1,4 @@
+#![allow(clippy::needless_doctest_main)]
 //! This crate `cpp` provides macros that allow embedding arbitrary C++ code.
 //!
 //! # Usage
@@ -32,7 +33,6 @@
 //!
 //! ```no_run
 //! extern crate cpp_build;
-//!
 //! fn main() {
 //!     cpp_build::build("src/main.rs");
 //! }
