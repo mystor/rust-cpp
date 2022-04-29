@@ -112,10 +112,7 @@ impl ClosureSig {
     }
 
     pub fn extern_name(&self) -> Ident {
-        Ident::new(
-            &format!("__cpp_closure_{}", self.name_hash()),
-            Span::call_site(),
-        )
+        Ident::new(&format!("__cpp_closure_{}", self.name_hash()), Span::call_site())
     }
 }
 
@@ -155,19 +152,10 @@ impl Parse for Closure {
         let body = input.parse::<TokenTree>()?;
         // Need to filter the spaces because there is a difference between
         // proc_macro2 and proc_macro and the hashes would not match
-        let std_body = body
-            .to_string()
-            .chars()
-            .filter(|x| !x.is_whitespace())
-            .collect();
+        let std_body = body.to_string().chars().filter(|x| !x.is_whitespace()).collect();
 
         Ok(Closure {
-            sig: ClosureSig {
-                captures,
-                ret,
-                cpp,
-                std_body,
-            },
+            sig: ClosureSig { captures, ret, cpp, std_body },
             body,
             body_str: String::new(),
             callback_offset: 0,

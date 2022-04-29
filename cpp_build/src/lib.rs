@@ -166,18 +166,8 @@ extern "C" {{
     let mut hashmap = HashMap::new();
 
     let mut sizealign = vec![];
-    for &Closure {
-        ref body_str,
-        ref sig,
-        ref callback_offset,
-        ..
-    } in &visitor.closures
-    {
-        let &ClosureSig {
-            ref captures,
-            ref cpp,
-            ..
-        } = sig;
+    for &Closure { ref body_str, ref sig, ref callback_offset, .. } in &visitor.closures {
+        let &ClosureSig { ref captures, ref cpp, .. } = sig;
 
         let hash = sig.name_hash();
         let name = sig.extern_name();
@@ -225,19 +215,13 @@ extern "C" {{
         // Generate the parameters and function declaration
         let params = captures
             .iter()
-            .map(
-                |&Capture {
-                     mutable,
-                     ref name,
-                     ref cpp,
-                 }| {
-                    if mutable {
-                        format!("{} & {}", cpp, name)
-                    } else {
-                        format!("{} const& {}", cpp, name)
-                    }
-                },
-            )
+            .map(|&Capture { mutable, ref name, ref cpp }| {
+                if mutable {
+                    format!("{} & {}", cpp, name)
+                } else {
+                    format!("{} const& {}", cpp, name)
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -433,10 +417,7 @@ impl Config {
     pub fn new() -> Config {
         let mut cc = cc::Build::new();
         cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
-        Config {
-            cc,
-            std_flag_set: false,
-        }
+        Config { cc, std_flag_set: false }
     }
 
     /// Add a directory to the `-I` or include path for headers

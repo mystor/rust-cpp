@@ -10,17 +10,9 @@ use syn::visit::Visit;
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum Error {
-    ParseCannotOpenFile {
-        src_path: String,
-    },
-    ParseSyntaxError {
-        src_path: String,
-        error: syn::parse::Error,
-    },
-    LexError {
-        src_path: String,
-        line: u32,
-    },
+    ParseCannotOpenFile { src_path: String },
+    ParseSyntaxError { src_path: String, error: syn::parse::Error },
+    LexError { src_path: String, line: u32 },
 }
 
 impl fmt::Display for Error {
@@ -29,14 +21,12 @@ impl fmt::Display for Error {
             Error::ParseCannotOpenFile { ref src_path } => {
                 write!(f, "Parsing crate: cannot open file `{}`.", src_path)
             }
-            Error::ParseSyntaxError {
-                ref src_path,
-                ref error,
-            } => write!(f, "Parsing file : `{}`:\n{}", src_path, error),
-            Error::LexError {
-                ref src_path,
-                ref line,
-            } => write!(f, "{}:{}: Lexing error", src_path, line + 1),
+            Error::ParseSyntaxError { ref src_path, ref error } => {
+                write!(f, "Parsing file : `{}`:\n{}", src_path, error)
+            }
+            Error::LexError { ref src_path, ref line } => {
+                write!(f, "{}:{}: Lexing error", src_path, line + 1)
+            }
         }
     }
 }
@@ -182,14 +172,8 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
 
 #[test]
 fn test_expand_sub_rust_macro() {
-    let x = expand_sub_rust_macro(
-        "{ rust!(xxx [] { 1 }); }".to_owned(),
-        ExpandSubMacroType::Lit,
-    );
-    assert_eq!(
-        x.unwrap(),
-        "extern \"C\" void xxx();\n{ reinterpret_cast<void (*)()>(xxx)(); }"
-    );
+    let x = expand_sub_rust_macro("{ rust!(xxx [] { 1 }); }".to_owned(), ExpandSubMacroType::Lit);
+    assert_eq!(x.unwrap(), "extern \"C\" void xxx();\n{ reinterpret_cast<void (*)()>(xxx)(); }");
 
     let x = expand_sub_rust_macro(
         "{ hello( rust!(xxx [] { 1 }), rust!(yyy [] { 2 }); ) }".to_owned(),
@@ -198,10 +182,7 @@ fn test_expand_sub_rust_macro() {
     assert_eq!(x.unwrap(), "extern \"C\" void xxx();\nextern \"C\" void yyy();\n{ hello( reinterpret_cast<void (*)()>(xxx)(), reinterpret_cast<void (*)()>(yyy)(); ) }");
 
     let s = "{ /* rust! */  /* rust!(xxx [] { 1 }) */ }".to_owned();
-    assert_eq!(
-        expand_sub_rust_macro(s.clone(), ExpandSubMacroType::Lit).unwrap(),
-        s
-    );
+    assert_eq!(expand_sub_rust_macro(s.clone(), ExpandSubMacroType::Lit).unwrap(), s);
 }
 
 #[path = "strnom.rs"]
@@ -247,12 +228,7 @@ fn skip_literal(mut input: Cursor) -> PResult<bool> {
 }
 
 fn new_cursor(s: &str) -> Cursor {
-    Cursor {
-        rest: s,
-        off: 0,
-        line: 0,
-        column: 0,
-    }
+    Cursor { rest: s, off: 0, line: 0, column: 0 }
 }
 
 #[test]
@@ -271,10 +247,8 @@ fn test_skip_literal() -> Result<(), LexError> {
 
     assert!((skip_whitespace(new_cursor("ok xx"))).starts_with("ok"));
     assert!((skip_whitespace(new_cursor("   ok xx"))).starts_with("ok"));
-    assert!((skip_whitespace(new_cursor(
-        " \n /*  /*dd \n // */ */ // foo \n    ok xx/* */"
-    )))
-    .starts_with("ok"));
+    assert!((skip_whitespace(new_cursor(" \n /*  /*dd \n // */ */ // foo \n    ok xx/* */")))
+        .starts_with("ok"));
 
     Ok(())
 }
@@ -310,10 +284,8 @@ fn find_delimited<'a>(mut input: Cursor<'a>, needle: &str) -> PResult<'a, ()> {
 fn test_find_delimited() -> Result<(), LexError> {
     assert!((find_delimited(new_cursor(" x f ok"), "f")?.0).starts_with("f ok"));
     assert!((find_delimited(new_cursor(" {f} f ok"), "f")?.0).starts_with("f ok"));
-    assert!(
-        (find_delimited(new_cursor(" (f\")\" { ( ) } /* ) */ f ) f ok"), "f")?.0)
-            .starts_with("f ok")
-    );
+    assert!((find_delimited(new_cursor(" (f\")\" { ( ) } /* ) */ f ) f ok"), "f")?.0)
+        .starts_with("f ok"));
     Ok(())
 }
 
@@ -324,23 +296,14 @@ fn test_cursor_advance() -> Result<(), LexError> {
     assert_eq!(new_cursor("\n\n\n").advance(2).column, 0);
     assert_eq!(new_cursor("\n \n\n").advance(2).column, 1);
 
-    assert_eq!(
-        (find_delimited(new_cursor("\n/*\n  \n */ ( \n ) /* */ f"), "f")?.0).line,
-        4
-    );
-    assert_eq!(
-        (find_delimited(new_cursor("\n/*\n  \n */ ( \n ) /* */ f"), "f")?.0).column,
-        9
-    );
+    assert_eq!((find_delimited(new_cursor("\n/*\n  \n */ ( \n ) /* */ f"), "f")?.0).line, 4);
+    assert_eq!((find_delimited(new_cursor("\n/*\n  \n */ ( \n ) /* */ f"), "f")?.0).column, 9);
     Ok(())
 }
 
 fn line_directive(path: &Path, cur: Cursor) -> String {
-    let mut line = format!(
-        "#line {} \"{}\"\n",
-        cur.line + 1,
-        path.to_string_lossy().replace('\\', "\\\\")
-    );
+    let mut line =
+        format!("#line {} \"{}\"\n", cur.line + 1, path.to_string_lossy().replace('\\', "\\\\"));
     for _ in 0..cur.column {
         line.push(' ');
     }
@@ -360,10 +323,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn parse_crate(&mut self, crate_root: PathBuf) -> Result<(), Error> {
-        let parent = crate_root
-            .parent()
-            .map(|x| x.to_owned())
-            .unwrap_or_default();
+        let parent = crate_root.parent().map(|x| x.to_owned()).unwrap_or_default();
         self.parse_mod(crate_root, parent)
     }
 
@@ -372,10 +332,9 @@ impl Parser {
         let mut f = File::open(&mod_path).map_err(|_| Error::ParseCannotOpenFile {
             src_path: mod_path.to_str().unwrap().to_owned(),
         })?;
-        f.read_to_string(&mut s)
-            .map_err(|_| Error::ParseCannotOpenFile {
-                src_path: mod_path.to_str().unwrap().to_owned(),
-            })?;
+        f.read_to_string(&mut s).map_err(|_| Error::ParseCannotOpenFile {
+            src_path: mod_path.to_str().unwrap().to_owned(),
+        })?;
 
         let fi = syn::parse_file(&s).map_err(|x| Error::ParseSyntaxError {
             src_path: mod_path.to_str().unwrap().to_owned(),
@@ -461,17 +420,12 @@ impl Parser {
                 };
                 cursor = cursor.advance(1);
                 let mut macro_cur = cursor;
-                cursor = find_delimited(cursor, delim)
-                    .map_err(|e| self.lex_error(e))?
-                    .0;
+                cursor = find_delimited(cursor, delim).map_err(|e| self.lex_error(e))?.0;
                 let size = (cursor.off - macro_cur.off) as usize;
                 macro_cur.rest = &macro_cur.rest[..size];
                 if ident == "cpp" {
                     self.handle_cpp(macro_cur).unwrap_or_else(|e| {
-                        panic!(
-                            "Error while parsing cpp! macro:\n{:?}:{}",
-                            self.current_path, e
-                        )
+                        panic!("Error while parsing cpp! macro:\n{:?}:{}", self.current_path, e)
                     });
                 } else {
                     debug_assert_eq!(ident, "cpp_class");
@@ -505,10 +459,8 @@ impl Parser {
         let end = find_delimited(begin, "}")?.0;
         let extracted = &begin.rest[..(end.off - begin.off) as usize];
 
-        let input: ::proc_macro2::TokenStream = x
-            .rest
-            .parse()
-            .map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
+        let input: ::proc_macro2::TokenStream =
+            x.rest.parse().map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
         match ::syn::parse2::<Macro>(input).map_err(|e| LineError(x.line, e.to_string()))? {
             Macro::Closure(mut c) => {
                 c.callback_offset = self.callbacks_count;
@@ -534,10 +486,8 @@ impl Parser {
     }
 
     fn handle_cpp_class(&mut self, x: Cursor) -> Result<(), LineError> {
-        let input: ::proc_macro2::TokenStream = x
-            .rest
-            .parse()
-            .map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
+        let input: ::proc_macro2::TokenStream =
+            x.rest.parse().map_err(|_| LineError(x.line, "TokenStream parse error".into()))?;
         let mut class =
             ::syn::parse2::<Class>(input).map_err(|e| LineError(x.line, e.to_string()))?;
         class.line = line_directive(&self.current_path, x);
@@ -585,21 +535,15 @@ impl<'ast> Visit<'ast> for Parser {
                     ..
                 })) if path.is_ident("path") => {
                     let mod_path = self.mod_dir.join(&s.value());
-                    let parent = self
-                        .mod_dir
-                        .parent()
-                        .map(|x| x.to_owned())
-                        .unwrap_or_default();
+                    let parent = self.mod_dir.parent().map(|x| x.to_owned()).unwrap_or_default();
                     return self
                         .parse_mod(mod_path, parent)
                         .unwrap_or_else(|err| self.mod_error = Some(err));
                 }
                 // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
-                Ok(syn::Meta::List(syn::MetaList {
-                    ref path,
-                    ref nested,
-                    ..
-                })) if path.is_ident("cfg") => {
+                Ok(syn::Meta::List(syn::MetaList { ref path, ref nested, .. }))
+                    if path.is_ident("cfg") =>
+                {
                     for n in nested {
                         match n {
                             syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {

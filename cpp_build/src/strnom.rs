@@ -123,11 +123,7 @@ pub fn whitespace(input: Cursor) -> PResult<()> {
                 }
             }
         }
-        return if i > 0 {
-            Ok((s, ()))
-        } else {
-            Err(LexError { line: s.line })
-        };
+        return if i > 0 { Ok((s, ())) } else { Err(LexError { line: s.line }) };
     }
     Ok((input.advance(input.len()), ()))
 }
