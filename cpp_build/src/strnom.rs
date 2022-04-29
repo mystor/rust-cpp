@@ -32,7 +32,9 @@ impl<'a> Cursor<'a> {
                 + self.rest[..amt]
                     .char_indices()
                     .filter(|&(_, ref x)| *x == '\n')
-                    .map(|(i, _)| { column_start = Some(i); } )
+                    .map(|(i, _)| {
+                        column_start = Some(i);
+                    })
                     .count() as u32,
             column: match column_start {
                 None => self.column + (amt as u32),
@@ -171,16 +173,12 @@ fn is_whitespace(ch: char) -> bool {
 
 #[inline]
 fn is_ident_start(c: char) -> bool {
-    c.is_ascii_alphabetic()
-        || c == '_'
-        || (c > '\x7f' && UnicodeXID::is_xid_start(c))
+    c.is_ascii_alphabetic() || c == '_' || (c > '\x7f' && UnicodeXID::is_xid_start(c))
 }
 
 #[inline]
 fn is_ident_continue(c: char) -> bool {
-    c.is_ascii_alphanumeric()
-        || c == '_'
-        || (c > '\x7f' && UnicodeXID::is_xid_continue(c))
+    c.is_ascii_alphanumeric() || c == '_' || (c > '\x7f' && UnicodeXID::is_xid_continue(c))
 }
 
 pub fn symbol(input: Cursor) -> PResult<&str> {

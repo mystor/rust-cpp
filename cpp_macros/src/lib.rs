@@ -109,9 +109,9 @@ Version mismatch between cpp_macros and cpp_build for same crate."#
     }
 }
 
-fn read_metadata_rest<E: ByteOrder>(mut file: BufReader<File>)
-    -> io::Result<HashMap<u64, Vec<MetaData>>>
-{
+fn read_metadata_rest<E: ByteOrder>(
+    mut file: BufReader<File>,
+) -> io::Result<HashMap<u64, Vec<MetaData>>> {
     let length = file.read_u64::<E>()?;
     let mut metadata = HashMap::new();
     for _ in 0..length {
