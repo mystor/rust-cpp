@@ -1,6 +1,6 @@
 [package]
 name = "cpp_macros"
-version = "0.5.6"
+version = "0.5.7"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
 edition = "2018"
 description = "Procedural macro implementation for the `cpp` crate"
@@ -21,7 +21,7 @@ proc-macro = true
 
 [dependencies]
 lazy_static = "1.0"
-cpp_common = { path = "../cpp_common", version = "=0.5.6" }
+cpp_common = { path = "../cpp_common", version = "=0.5.7" }
 syn = { version = "1.0", features=["full", "visit"] }
 quote = "1.0"
 proc-macro2 = "1.0"

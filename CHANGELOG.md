@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7 - 2022-04-29
+
+ - Fixed clippy warnings
+
 ## 0.5.6 - 2020-12-28
 
  - Fixed module lookup when using mod.rs (#88)
