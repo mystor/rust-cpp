@@ -1,6 +1,5 @@
 # rust-cpp - Embed C++ code directly in Rust
 
-[![Build Status](https://travis-ci.org/mystor/rust-cpp.svg?branch=master)](https://travis-ci.org/mystor/rust-cpp)
 [![Build status](https://ci.appveyor.com/api/projects/status/uu76vmcrwnjqra0u/branch/master?svg=true)](https://ci.appveyor.com/project/mystor/rust-cpp/branch/master)
 [![Documentation](https://docs.rs/cpp/badge.svg)](https://docs.rs/cpp/)
 
