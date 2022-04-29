@@ -7,6 +7,7 @@ use std::mem::swap;
 use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum Error {
     ParseCannotOpenFile {
@@ -607,7 +608,7 @@ impl<'ast> Visit<'ast> for Parser {
                                 ..
                             })) if path.is_ident("feature") => {
                                 let feature_env_var = "CARGO_FEATURE_".to_owned()
-                                    + &feature.value().to_uppercase().replace("-", "_");
+                                    + &feature.value().to_uppercase().replace('-', "_");
                                 if std::env::var_os(feature_env_var).is_none() {
                                     return;
                                 }

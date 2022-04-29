@@ -179,7 +179,7 @@ fn extract_original_macro(input: &syn::DeriveInput) -> Option<proc_macro2::Token
         }
     }
     let mut f = Finder::default();
-    syn::visit::visit_derive_input(&mut f, &input);
+    syn::visit::visit_derive_input(&mut f, input);
     f.0
 }
 

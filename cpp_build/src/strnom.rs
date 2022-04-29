@@ -303,6 +303,7 @@ pub fn cooked_byte_string(mut input: Cursor) -> PResult<()> {
 pub fn raw_string(input: Cursor) -> PResult<()> {
     let mut chars = input.char_indices();
     let mut n = 0;
+    #[allow(clippy::while_let_on_iterator)] //chars is used in the next loop
     while let Some((byte_offset, ch)) = chars.next() {
         match ch {
             '"' => {
