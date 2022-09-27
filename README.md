@@ -38,11 +38,12 @@ the [`cpp` crate module level documentation](https://docs.rs/cpp).
 
 ## Differences with the [`cxx`](https://cxx.rs) crate
 
-This crate allows to write C++ code "inline" within yout Rust functions, while with the [`cxx`](https://cxx.rs) crate, you have
+This crate allows to write C++ code "inline" within your Rust functions, while with the [`cxx`](https://cxx.rs) crate, you have
 to write a bit of boiler plate to have calls to functions declared in a different `.cpp` file.
-Having C++ code inline might be helpful when trying to call to a C++ library and that one may whish to make plenty of call to small snipets.
+
+Having C++ code inline might be helpful when trying to call to a C++ library and that one may wish to make plenty of call to small snippets.
 It can otherwise be fastidious to write and maintain the boiler plate for many small functions in different places. 
 
-These crate can also be used in together. The `cxx` crate offer some usefull types such as `CxxString` that can also be used wth this crate.
+These crate can also be used in together. The `cxx` crate offer some useful types such as `CxxString` that can also be used with this crate.
 
-The `cxx` bridge does more type checking which can avoid some classes of errors. While this crate can only check for equal size and alignement.
+The `cxx` bridge does more type checking which can avoid some classes of errors. While this crate can only check for equal size and alignment.

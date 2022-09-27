@@ -336,7 +336,7 @@ pub trait CppTrait {
 /// Most C++ types which do not contain self-references will be compatible,
 /// although this property cannot be statically checked by `rust-cpp`.
 /// All types that satisfy `std::is_trivially_copyable` are compatible.
-/// Maybe future version of the C++ standard would allow a comile-time check:
+/// Maybe future version of the C++ standard would allow a compile-time check:
 /// [P1144](http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p1144r4.html)
 ///
 /// Unfortunately, as the STL often uses internal self-references for
