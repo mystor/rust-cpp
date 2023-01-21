@@ -15,10 +15,11 @@ documentation = "https://docs.rs/cpp_build"
 # Ignore compilations error of the C++ code when building the documentation, as the docs.rs server
 # might not have the required libraries
 docs-only = []
+parallel = ["cc/parallel"]
 
 [dependencies]
 lazy_static = "1.0"
-cc = { version = "1.0", features = ["parallel"] }
+cc = "1.0.38"
 cpp_common = { path = "../cpp_common", version = "=0.5.8" }
 syn = { version = "1.0", features=["full", "visit"] }
 proc-macro2 = "1.0"
