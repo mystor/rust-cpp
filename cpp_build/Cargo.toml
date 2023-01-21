@@ -1,6 +1,6 @@
 [package]
 name = "cpp_build"
-version = "0.5.7"
+version = "0.5.8"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
 edition = "2018"
 description = "Cargo build script for the `cpp` crate"
@@ -18,8 +18,8 @@ docs-only = []
 
 [dependencies]
 lazy_static = "1.0"
-cc = "1.0.38"
-cpp_common = { path = "../cpp_common", version = "=0.5.7" }
+cc = { version = "1.0", features = ["parallel"] }
+cpp_common = { path = "../cpp_common", version = "=0.5.8" }
 syn = { version = "1.0", features=["full", "visit"] }
 proc-macro2 = "1.0"
 regex = "1"
