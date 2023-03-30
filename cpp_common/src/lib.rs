@@ -181,21 +181,16 @@ impl Class {
 
     pub fn derives(&self, i: &str) -> bool {
         self.attrs.iter().any(|x| {
-            use syn::{Meta, NestedMeta};
-            x.parse_meta().ok().map_or(false, |m| {
-                if let Meta::List(ref list) = m {
-                    list.path.is_ident("derive")
-                        && list.nested.iter().any(|y| {
-                            if let NestedMeta::Meta(Meta::Path(p)) = y {
-                                p.is_ident(i)
-                            } else {
-                                false
-                            }
-                        })
-                } else {
-                    false
-                }
-            })
+            let mut result = false;
+            if x.path().is_ident("derive") {
+                x.parse_nested_meta(|m| {
+                    Ok(if m.path.is_ident(i) {
+                        result = true;
+                    })
+                })
+                .unwrap();
+            }
+            result
         })
     }
 }
@@ -258,13 +253,13 @@ impl Parse for RustInvocation {
         let p = parenthesized!(macro_content in input);
         let r = RustInvocation {
             begin: rust_token.span,
-            end: p.span,
+            end: p.span.close(),
             id: macro_content.parse()?,
             arguments: {
                 let capture_content;
                 bracketed!(capture_content in macro_content);
                 capture_content
-                    .parse_terminated::<(Ident, String), Token![,]>(
+                    .parse_terminated(
                         |input: ParseStream| -> Result<(Ident, String)> {
                             let i = input.call(Ident::parse_any)?;
                             input.parse::<Token![:]>()?;
@@ -273,6 +268,7 @@ impl Parse for RustInvocation {
                             let s = input.parse::<syn::LitStr>()?.value();
                             Ok((i, s))
                         },
+                        Token![,],
                     )?
                     .into_iter()
                     .collect()

@@ -525,15 +525,17 @@ impl<'ast> Visit<'ast> for Parser {
             return;
         }
 
+        let mut cfg_disabled = false;
+
         // Determine the path of the inner module's file
         for attr in &item.attrs {
-            match attr.parse_meta() {
+            match &attr.meta {
                 // parse #[path = "foo.rs"]: read module from the specified path
-                Ok(syn::Meta::NameValue(syn::MetaNameValue {
-                    ref path,
-                    lit: syn::Lit::Str(ref s),
+                syn::Meta::NameValue(syn::MetaNameValue {
+                    path,
+                    value: syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(s), .. }),
                     ..
-                })) if path.is_ident("path") => {
+                }) if path.is_ident("path") => {
                     let mod_path = self.mod_dir.join(&s.value());
                     let parent = self.mod_dir.parent().map(|x| x.to_owned()).unwrap_or_default();
                     return self
@@ -541,28 +543,25 @@ impl<'ast> Visit<'ast> for Parser {
                         .unwrap_or_else(|err| self.mod_error = Some(err));
                 }
                 // parse #[cfg(feature = "feature")]: don't follow modules not enabled by current features
-                Ok(syn::Meta::List(syn::MetaList { ref path, ref nested, .. }))
-                    if path.is_ident("cfg") =>
-                {
-                    for n in nested {
-                        match n {
-                            syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
-                                path,
-                                lit: syn::Lit::Str(feature),
-                                ..
-                            })) if path.is_ident("feature") => {
-                                let feature_env_var = "CARGO_FEATURE_".to_owned()
-                                    + &feature.value().to_uppercase().replace('-', "_");
-                                if std::env::var_os(feature_env_var).is_none() {
-                                    return;
-                                }
+                syn::Meta::List(list @ syn::MetaList { path, .. }) if path.is_ident("cfg") => {
+                    drop(list.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("feature") {
+                            let feature: syn::LitStr = meta.value()?.parse()?;
+                            let feature_env_var = "CARGO_FEATURE_".to_owned()
+                                + &feature.value().to_uppercase().replace('-', "_");
+                            if std::env::var_os(feature_env_var).is_none() {
+                                cfg_disabled = true;
                             }
-                            _ => {}
                         }
-                    }
+                        Ok(())
+                    }))
                 }
                 _ => {}
             }
+        }
+
+        if cfg_disabled {
+            return;
         }
 
         let mod_name = item.ident.to_string();
