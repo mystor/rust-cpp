@@ -1,5 +1,5 @@
 #![recursion_limit = "512"]
-#![cfg_attr(not(test), allow(dead_code, unused_imports))]
+#![cfg_attr(not(test), allow(dead_code, unused_imports, clippy::needless_return))]
 
 use cpp::{cpp, cpp_class};
 
@@ -322,19 +322,14 @@ fn rust_submacro_trait() {
 #[test]
 fn witin_macro() {
     assert_eq!(unsafe { cpp!([] -> u32 as "int" { return 12; }) }, 12);
-    let s = format!("hello{}", unsafe {
-        cpp!([] -> u32 as "int" { return 14; })
-    });
+    let s = format!("hello{}", unsafe { cpp!([] -> u32 as "int" { return 14; }) });
     assert_eq!(s, "hello14");
 }
 
 #[test]
 fn with_unsafe() {
     let x = 45;
-    assert_eq!(
-        cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }),
-        46
-    );
+    assert_eq!(cpp!(unsafe [x as "int"] -> u32 as "int" { return x + 1; }), 46);
 }
 
 #[test]

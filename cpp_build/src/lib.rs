@@ -1,25 +1,15 @@
 //! This crate is the `cpp` cargo build script implementation. It is useless
 //! without the companion crates `cpp`, and `cpp_macro`.
 //!
-//! For more information, see the [`cpp` crate module level
-//! documentation](https://docs.rs/cpp).
+//! For more information, see the
+//! [`cpp` crate module level documentation](https://docs.rs/cpp).
 
 #![allow(clippy::write_with_newline)]
 
-extern crate cc;
-extern crate cpp_common;
-extern crate proc_macro2;
-extern crate regex;
-extern crate syn;
-extern crate unicode_xid;
-
-#[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
 mod strnom;
 
 use cpp_common::*;
+use lazy_static::lazy_static;
 use std::collections::hash_map::{Entry, HashMap};
 use std::env;
 use std::fs::{create_dir, remove_dir_all, File};
@@ -166,8 +156,8 @@ extern "C" {{
     let mut hashmap = HashMap::new();
 
     let mut sizealign = vec![];
-    for &Closure { ref body_str, ref sig, ref callback_offset, .. } in &visitor.closures {
-        let &ClosureSig { ref captures, ref cpp, .. } = sig;
+    for Closure { body_str, sig, callback_offset, .. } in &visitor.closures {
+        let ClosureSig { captures, cpp, .. } = sig;
 
         let hash = sig.name_hash();
         let name = sig.extern_name();
@@ -203,7 +193,7 @@ extern "C" {{
                 rustcpp::Flags<{type}>::value | {callback_offset}ull << 32
             }}", hash=hash, type=cpp, callback_offset = callback_offset));
         }
-        for &Capture { ref cpp, .. } in captures {
+        for Capture { cpp, .. } in captures {
             sizealign.push(format!("{{
                 {hash}ull,
                 sizeof({type}),
@@ -242,7 +232,7 @@ void {name}({params}) {{
             let comma = if params.is_empty() { "" } else { "," };
             let args = captures
                 .iter()
-                .map(|&Capture { ref name, .. }| name.to_string())
+                .map(|Capture { name, .. }| name.to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
             #[rustfmt::skip]

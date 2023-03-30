@@ -115,7 +115,7 @@ fn read_metadata_rest<E: ByteOrder>(
         let hash = file.read_u64::<E>()?;
         let size = file.read_u64::<E>()? as usize;
         let align = file.read_u64::<E>()? as usize;
-        let flags = file.read_u64::<E>()? as u64;
+        let flags = file.read_u64::<E>()?;
 
         metadata.entry(hash).or_insert_with(Vec::new).push(MetaData { size, align, flags });
     }

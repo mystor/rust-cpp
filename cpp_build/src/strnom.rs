@@ -31,7 +31,7 @@ impl<'a> Cursor<'a> {
             line: self.line
                 + self.rest[..amt]
                     .char_indices()
-                    .filter(|&(_, ref x)| *x == '\n')
+                    .filter(|(_, x)| *x == '\n')
                     .map(|(i, _)| {
                         column_start = Some(i);
                     })

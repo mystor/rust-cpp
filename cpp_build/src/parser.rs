@@ -1,4 +1,5 @@
 use cpp_common::{Class, Closure, Macro, RustInvocation};
+use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt;
 use std::fs::File;
@@ -126,13 +127,10 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
         let mut decl_types = rust_invocation
             .arguments
             .iter()
-            .map(|&(_, ref val)| format!("rustcpp::argument_helper<{}>::type", val))
+            .map(|(_, val)| format!("rustcpp::argument_helper<{}>::type", val))
             .collect::<Vec<_>>();
-        let mut call_args = rust_invocation
-            .arguments
-            .iter()
-            .map(|&(ref val, _)| val.to_string())
-            .collect::<Vec<_>>();
+        let mut call_args =
+            rust_invocation.arguments.iter().map(|(val, _)| val.to_string()).collect::<Vec<_>>();
 
         let fn_call = match rust_invocation.return_type {
             None => format!(
@@ -536,7 +534,7 @@ impl<'ast> Visit<'ast> for Parser {
                     value: syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(s), .. }),
                     ..
                 }) if path.is_ident("path") => {
-                    let mod_path = self.mod_dir.join(&s.value());
+                    let mod_path = self.mod_dir.join(s.value());
                     let parent = self.mod_dir.parent().map(|x| x.to_owned()).unwrap_or_default();
                     return self
                         .parse_mod(mod_path, parent)
@@ -573,7 +571,7 @@ impl<'ast> Visit<'ast> for Parser {
                 .unwrap_or_else(|err| self.mod_error = Some(err));
         }
 
-        let adjacent = self.mod_dir.join(&format!("{}.rs", mod_name));
+        let adjacent = self.mod_dir.join(format!("{}.rs", mod_name));
         if adjacent.is_file() {
             return self
                 .parse_mod(adjacent, subdir)

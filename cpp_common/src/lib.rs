@@ -184,9 +184,10 @@ impl Class {
             let mut result = false;
             if x.path().is_ident("derive") {
                 x.parse_nested_meta(|m| {
-                    Ok(if m.path.is_ident(i) {
+                    if m.path.is_ident(i) {
                         result = true;
-                    })
+                    }
+                    Ok(())
                 })
                 .unwrap();
             }
