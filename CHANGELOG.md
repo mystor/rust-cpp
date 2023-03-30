@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8 - 20223-03-30
+
+ - Fixed clippy warnings
+ - Added `parallel` feature forwarding to `cc/parallel`
+ - Ported to `syn 2.0`
+
 ## 0.5.7 - 2022-04-29
 
  - Fixed clippy warnings
