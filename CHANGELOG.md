@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.5.8 - 20223-03-30
+## 0.5.9 - 2023-08-16
+
+ - updated aha-corasick dependency
+
+## 0.5.8 - 2023-03-30
 
  - Fixed clippy warnings
  - Added `parallel` feature forwarding to `cc/parallel`

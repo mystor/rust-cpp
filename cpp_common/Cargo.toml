@@ -1,6 +1,6 @@
 [package]
 name = "cpp_common"
-version = "0.5.8"
+version = "0.5.9"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
 edition = "2018"
 description = "Implementation details crate for the `cpp` crate"
