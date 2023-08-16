@@ -70,7 +70,7 @@ fn read_metadata(file: File) -> io::Result<HashMap<u64, Vec<MetaData>>> {
     let mut file = BufReader::new(file);
     let end = {
         const AUTO_KEYWORD: &[&[u8]] = &[&cpp_common::STRUCT_METADATA_MAGIC];
-        let aut = aho_corasick::AhoCorasick::new(AUTO_KEYWORD);
+        let aut = aho_corasick::AhoCorasick::new(AUTO_KEYWORD).unwrap();
         let found = aut.stream_find_iter(&mut file).next().expect(
             r#"
 -- rust-cpp fatal error --
