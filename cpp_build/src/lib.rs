@@ -400,14 +400,22 @@ impl Default for Config {
     }
 }
 
+/// Convert from a preconfigured [`cc::Build`] object to [`Config`].
+/// Note that this will ensure C++ is enabled and add the proper include
+/// directories to work with `cpp`.
+impl From<cc::Build> for Config {
+    fn from(mut cc: cc::Build) -> Self {
+        cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
+        Self { cc, std_flag_set: false }
+    }
+}
+
 impl Config {
     /// Create a new `Config` object. This object will hold the configuration
     /// options which control the build. If you don't need to make any changes,
     /// `cpp_build::build` is a wrapper function around this interface.
     pub fn new() -> Config {
-        let mut cc = cc::Build::new();
-        cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
-        Config { cc, std_flag_set: false }
+        cc::Build::new().into()
     }
 
     /// Add a directory to the `-I` or include path for headers
