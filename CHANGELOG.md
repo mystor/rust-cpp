@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.10 - 2024-11-20
+
+ - `impl From<cc::Build> for cpp_build::Config`
+ - Fix warning about unexpected cfg in crates using `cpp!`
+
 ## 0.5.9 - 2023-08-16
 
  - updated aha-corasick dependency
