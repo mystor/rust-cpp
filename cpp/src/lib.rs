@@ -143,8 +143,7 @@ macro_rules! __cpp_internal {
     (@expand_rust_macro [$($a:tt)*] $i:ident [$($an:ident : $at:ty as $ac:tt),*] {$($body:tt)*}) => {
         #[allow(non_snake_case)]
         #[allow(unused_unsafe)]
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::forget_copy))]
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::forget_ref))]
+        #[allow(clippy::forget_copy, clippy::forget_ref)]
         #[doc(hidden)]
         $($a)* unsafe extern "C" fn $i($($an : *const $at),*) {
             $(let $an : $at = unsafe { $an.read() };)*
@@ -156,8 +155,7 @@ macro_rules! __cpp_internal {
     (@expand_rust_macro [$($a:tt)*] $i:ident [$($an:ident : $at:ty as $ac:tt),*] -> $rt:ty as $rc:tt {$($body:tt)*}) => {
         #[allow(non_snake_case)]
         #[allow(unused_unsafe)]
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::forget_copy))]
-        #[cfg_attr(feature = "cargo-clippy", allow(clippy::forget_ref))]
+        #[allow(clippy::forget_copy, clippy::forget_ref)]
         #[doc(hidden)]
         $($a)* unsafe extern "C" fn $i($($an : *const $at, )* rt : *mut $rt) -> *mut $rt {
 
