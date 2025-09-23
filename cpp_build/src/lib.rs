@@ -601,6 +601,15 @@ impl Config {
         self
     }
 
+    /// Configures whether the /MT flag or the /MD flag will be passed to msvc
+    /// build tools.
+    ///
+    /// This option defaults to `false`, and affect only msvc targets.
+    pub fn static_crt(&mut self, static_crt: bool) -> &mut Config {
+        self.cc.static_crt(static_crt);
+        self
+    }
+
     /// Extracts `cpp` declarations from the passed-in crate root, and builds
     /// the associated static library to be linked in to the final binary.
     ///
