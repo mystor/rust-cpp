@@ -128,7 +128,7 @@ pub fn whitespace(input: Cursor) -> PResult<()> {
     Ok((input.advance(input.len()), ()))
 }
 
-pub fn block_comment(input: Cursor) -> PResult<&str> {
+pub fn block_comment(input: Cursor<'_>) -> PResult<'_, &str> {
     if !input.starts_with("/*") {
         return Err(LexError { line: input.line });
     }
@@ -177,7 +177,7 @@ fn is_ident_continue(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_' || (c > '\x7f' && UnicodeXID::is_xid_continue(c))
 }
 
-pub fn symbol(input: Cursor) -> PResult<&str> {
+pub fn symbol(input: Cursor<'_>) -> PResult<'_, &str> {
     let mut chars = input.char_indices();
 
     let raw = input.starts_with("r#");

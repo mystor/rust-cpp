@@ -225,7 +225,7 @@ fn skip_literal(mut input: Cursor) -> PResult<bool> {
     Ok((input, false))
 }
 
-fn new_cursor(s: &str) -> Cursor {
+fn new_cursor(s: &'_ str) -> Cursor<'_> {
     Cursor { rest: s, off: 0, line: 0, column: 0 }
 }
 
