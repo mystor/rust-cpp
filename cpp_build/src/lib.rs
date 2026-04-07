@@ -654,6 +654,15 @@ In order to provide a better error message, the build script will exit successfu
         if !self.std_flag_set {
             self.cc.flag_if_supported("-std=c++11");
         }
+        // Disable LTO for the generated C++ library. The cpp crate embeds
+        // metadata as raw bytes in the .data section of the compiled object,
+        // which the cpp_macros proc-macro later locates via byte pattern
+        // matching. When LTO is enabled (e.g. -flto=auto from environment
+        // CXXFLAGS), the compiler emits GIMPLE IR instead of native code,
+        // leaving the .data section empty and making the metadata invisible
+        // to the proc-macro.
+        self.cc.flag_if_supported("-fno-lto");
+
         // Build the C++ library
         if let Err(e) = self.cc.file(filename).try_compile(LIB_NAME) {
             let _ = writeln!(std::io::stderr(), "\n\nerror occurred: {}\n\n", e);
