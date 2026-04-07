@@ -259,7 +259,7 @@ fn find_delimited<'a>(mut input: Cursor<'a>, needle: &str) -> PResult<'a, ()> {
         }
         if stack.is_empty() && input.starts_with(needle) {
             return Ok((input, ()));
-        } else if stack.last().map_or(false, |x| input.starts_with(x)) {
+        } else if stack.last().is_some_and(|x| input.starts_with(x)) {
             stack.pop();
         } else if input.starts_with("(") {
             stack.push(")");
