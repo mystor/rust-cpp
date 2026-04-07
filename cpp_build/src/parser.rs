@@ -183,8 +183,6 @@ fn test_expand_sub_rust_macro() {
     assert_eq!(expand_sub_rust_macro(s.clone(), ExpandSubMacroType::Lit).unwrap(), s);
 }
 
-#[path = "strnom.rs"]
-mod strnom;
 use crate::strnom::*;
 
 fn skip_literal(mut input: Cursor) -> PResult<bool> {
