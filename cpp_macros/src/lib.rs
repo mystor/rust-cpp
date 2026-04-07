@@ -5,14 +5,12 @@
 //! documentation](https://docs.rs/cpp).
 #![recursion_limit = "128"]
 
-#[macro_use]
-extern crate syn;
-extern crate proc_macro;
+use syn::{braced, bracketed, parenthesized, parse_macro_input};
+
 use proc_macro2::Span;
 
 use cpp_common::{file_hash, flags, kw, out_dir, RustInvocation, LIB_NAME, MSVC_LIB_NAME, VERSION};
 use std::collections::HashMap;
-use std::iter::FromIterator;
 use std::sync::OnceLock;
 use syn::parse::Parser;
 use syn::Ident;

@@ -2,7 +2,7 @@
 name = "cpp"
 version = "0.5.10"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
-edition = "2018"
+edition.workspace = true
 rust-version.workspace = true
 description = "Inline C++ code closures"
 readme = "../README.md"

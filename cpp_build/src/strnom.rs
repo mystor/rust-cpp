@@ -372,10 +372,10 @@ pub fn cooked_char(input: Cursor) -> PResult<()> {
 }
 
 macro_rules! next_ch {
-    ($chars:ident @ $pat:pat $(| $rest:pat)*) => {
+    ($chars:ident @ $pat:pat) => {
         match $chars.next() {
             Some((_, ch)) => match ch {
-                $pat $(| $rest)*  => ch,
+                $pat => ch,
                 _ => return false,
             },
             None => return false

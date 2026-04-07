@@ -3,9 +3,7 @@
 //! The purpose of this crate is only to allow sharing code between the
 //! `cpp_build` and the `cpp_macros` crates.
 
-#[macro_use]
-extern crate syn;
-extern crate proc_macro2;
+use syn::{braced, bracketed, parenthesized, Token};
 
 use std::collections::hash_map::DefaultHasher;
 use std::env;
@@ -33,7 +31,7 @@ pub mod flags {
 
 pub mod kw {
     #![allow(non_camel_case_types)]
-    custom_keyword!(rust);
+    syn::custom_keyword!(rust);
 }
 
 /// This constant is expected to be a unique string within the compiled binary
