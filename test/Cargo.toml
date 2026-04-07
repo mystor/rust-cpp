@@ -8,5 +8,10 @@ build = "build.rs"
 [build-dependencies]
 cpp_build = { path = "../cpp_build" }
 
+# "non_existent" is intentionally not a real feature — it tests that cpp_build
+# skips cfg'd-out modules. Declare it here so check-cfg doesn't warn.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("non_existent"))'] }
+
 [dependencies]
 cpp = { path = "../cpp" }
