@@ -18,7 +18,6 @@ docs-only = []
 parallel = ["cc/parallel"]
 
 [dependencies]
-lazy_static = "1.0"
 cc = "1.0.38"
 cpp_common = { path = "../cpp_common", version = "=0.5.10" }
 syn = { version = "2.0", features=["full", "visit"] }

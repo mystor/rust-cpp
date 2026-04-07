@@ -9,12 +9,12 @@
 mod strnom;
 
 use cpp_common::*;
-use lazy_static::lazy_static;
 use std::collections::hash_map::{Entry, HashMap};
 use std::env;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 mod parser;
 
@@ -122,19 +122,27 @@ template<typename T> int compare_helper(const T &a, const T&b, int cmp) {
     }
 "#;
 
-lazy_static! {
-    static ref CPP_DIR: PathBuf = OUT_DIR.join("rust_cpp");
-    static ref CARGO_MANIFEST_DIR: PathBuf = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(
-        r#"
+static CPP_DIR_LOCK: OnceLock<PathBuf> = OnceLock::new();
+static CARGO_MANIFEST_DIR_LOCK: OnceLock<PathBuf> = OnceLock::new();
+
+fn cpp_dir() -> &'static PathBuf {
+    CPP_DIR_LOCK.get_or_init(|| out_dir().join("rust_cpp"))
+}
+
+fn cargo_manifest_dir() -> &'static PathBuf {
+    CARGO_MANIFEST_DIR_LOCK.get_or_init(|| {
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect(
+            r#"
 -- rust-cpp fatal error --
 
 The CARGO_MANIFEST_DIR environment variable was not set.
-NOTE: rust-cpp's build function must be run in a build script."#
-    ));
+NOTE: rust-cpp's build function must be run in a build script."#,
+        ))
+    })
 }
 
 fn gen_cpp_lib(visitor: &parser::Parser) -> PathBuf {
-    let result_path = CPP_DIR.join("cpp_closures.cpp");
+    let result_path = cpp_dir().join("cpp_closures.cpp");
     let mut output = File::create(&result_path).expect("Unable to generate temporary C++ file");
 
     write!(output, "{}", INTERNAL_CPP_STRUCTS).unwrap();
@@ -146,7 +154,7 @@ extern "C" {{
     void (*rust_cpp_callbacks{file_hash}[{callbacks_count}])() = {{}};
 }}
         "#,
-            file_hash = *FILE_HASH,
+            file_hash = file_hash(),
             callbacks_count = visitor.callbacks_count
         ).unwrap();
     }
@@ -348,7 +356,7 @@ MetaData metadata_{hash} = {{
 
 }} // namespace rustcpp
 "#,
-        hash = *FILE_HASH,
+        hash = file_hash(),
         data = sizealign.join(", "),
         length = sizealign.len(),
         magic = magic.join(", "),
@@ -364,8 +372,8 @@ MetaData metadata_{hash} = {{
 }
 
 fn clean_artifacts() {
-    if CPP_DIR.is_dir() {
-        remove_dir_all(&*CPP_DIR).expect(
+    if cpp_dir().is_dir() {
+        remove_dir_all(cpp_dir()).expect(
             r#"
 -- rust-cpp fatal error --
 
@@ -373,7 +381,7 @@ Failed to remove existing build artifacts from output directory."#,
         );
     }
 
-    create_dir(&*CPP_DIR).expect(
+    create_dir(cpp_dir()).expect(
         r#"
 -- rust-cpp fatal error --
 
@@ -405,7 +413,7 @@ impl Default for Config {
 /// directories to work with `cpp`.
 impl From<cc::Build> for Config {
     fn from(mut cc: cc::Build) -> Self {
-        cc.cpp(true).include(&*CARGO_MANIFEST_DIR);
+        cc.cpp(true).include(cargo_manifest_dir());
         Self { cc, std_flag_set: false }
     }
 }

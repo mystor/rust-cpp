@@ -13,5 +13,4 @@ documentation = "https://docs.rs/cpp_common"
 
 [dependencies]
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-lazy_static = "1.0"
 proc-macro2 = "1.0"

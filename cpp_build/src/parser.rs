@@ -1,11 +1,11 @@
 use cpp_common::{Class, Closure, Macro, RustInvocation};
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::mem::swap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use syn::visit::Visit;
 
 #[allow(clippy::enum_variant_names)]
@@ -114,11 +114,11 @@ fn expand_sub_rust_macro(input: String, mut t: ExpandSubMacroType) -> Result<Str
                 rust_invocation.id.clone().to_string()
             }
             ExpandSubMacroType::Closure(ref mut offset) => {
-                use cpp_common::FILE_HASH;
+                use cpp_common::file_hash;
                 **offset += 1;
                 format!(
                     "rust_cpp_callbacks{file_hash}[{offset}]",
-                    file_hash = *FILE_HASH,
+                    file_hash = file_hash(),
                     offset = **offset - 1
                 )
             }
@@ -214,10 +214,9 @@ fn skip_literal(mut input: Cursor) -> PResult<bool> {
         }
         return Ok((input.advance(1), true));
     }
-    lazy_static! {
-        static ref RAW: Regex = Regex::new(r##"^b?r#*""##).unwrap();
-    }
-    if RAW.is_match(input.rest) {
+    static RAW: OnceLock<Regex> = OnceLock::new();
+    let raw = RAW.get_or_init(|| Regex::new(r##"^b?r#*""##).unwrap());
+    if raw.is_match(input.rest) {
         let q = input.rest.find('r').unwrap();
         input = input.advance(q + 1);
         return raw_string(input).map(|x| (x.0, true));

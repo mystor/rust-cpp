@@ -7,13 +7,11 @@
 extern crate syn;
 extern crate proc_macro2;
 
-#[macro_use]
-extern crate lazy_static;
-
 use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::ext::IdentExt;
@@ -58,19 +56,27 @@ pub const STRUCT_METADATA_MAGIC: [u8; 128] = [
     134, 183, 212, 227, 31,  217, 12,  5,   65,  221, 150, 59,  230, 96,  73,  62,
 ];
 
-lazy_static! {
-    pub static ref OUT_DIR: PathBuf = PathBuf::from(env::var("OUT_DIR").expect(
-        r#"
+static OUT_DIR_LOCK: OnceLock<PathBuf> = OnceLock::new();
+static FILE_HASH_LOCK: OnceLock<u64> = OnceLock::new();
+
+pub fn out_dir() -> &'static PathBuf {
+    OUT_DIR_LOCK.get_or_init(|| {
+        PathBuf::from(env::var("OUT_DIR").expect(
+            r#"
 -- rust-cpp fatal error --
 
 The OUT_DIR environment variable was not set.
-NOTE: rustc must be run by Cargo."#
-    ));
-    pub static ref FILE_HASH: u64 = {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        OUT_DIR.hash(&mut hasher);
+NOTE: rustc must be run by Cargo."#,
+        ))
+    })
+}
+
+pub fn file_hash() -> u64 {
+    *FILE_HASH_LOCK.get_or_init(|| {
+        let mut hasher = DefaultHasher::new();
+        out_dir().hash(&mut hasher);
         hasher.finish()
-    };
+    })
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

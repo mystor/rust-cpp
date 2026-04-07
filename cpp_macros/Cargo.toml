@@ -20,7 +20,6 @@ docs-only = []
 proc-macro = true
 
 [dependencies]
-lazy_static = "1.0"
 cpp_common = { path = "../cpp_common", version = "=0.5.10" }
 syn = { version = "2.0", features=["full", "visit"] }
 quote = "1.0"
