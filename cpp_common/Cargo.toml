@@ -3,6 +3,7 @@ name = "cpp_common"
 version = "0.5.10"
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
 edition = "2018"
+rust-version.workspace = true
 description = "Implementation details crate for the `cpp` crate"
 readme = "../README.md"
 license = "MIT/Apache-2.0"
