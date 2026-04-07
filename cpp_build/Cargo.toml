@@ -1,6 +1,6 @@
 [package]
 name = "cpp_build"
-version = "0.5.10"
+version.workspace = true
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint.dev>"]
 edition.workspace = true
 rust-version.workspace = true
@@ -20,7 +20,7 @@ parallel = ["cc/parallel"]
 
 [dependencies]
 cc = "1.0.38"
-cpp_common = { path = "../cpp_common", version = "=0.5.10" }
+cpp_common = { path = "../cpp_common", version = "=0.5.11" }
 syn = { version = "2.0", features=["full", "visit"] }
 proc-macro2 = "1.0"
 regex = "1"

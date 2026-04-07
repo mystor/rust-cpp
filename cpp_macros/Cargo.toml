@@ -1,6 +1,6 @@
 [package]
 name = "cpp_macros"
-version = "0.5.10"
+version.workspace = true
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint.dev>"]
 edition.workspace = true
 rust-version.workspace = true
@@ -21,7 +21,7 @@ docs-only = []
 proc-macro = true
 
 [dependencies]
-cpp_common = { path = "../cpp_common", version = "=0.5.10" }
+cpp_common = { path = "../cpp_common", version = "=0.5.11" }
 syn = { version = "2.0", features=["full", "visit"] }
 quote = "1.0"
 proc-macro2 = "1.0"

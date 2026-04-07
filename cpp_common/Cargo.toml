@@ -1,6 +1,6 @@
 [package]
 name = "cpp_common"
-version = "0.5.10"
+version.workspace = true
 authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint.dev>"]
 edition.workspace = true
 rust-version.workspace = true

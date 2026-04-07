@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.11 - 2026-04-07
+
+ - Add `static_crt` option to `cpp_build::Config`
+ - Fix `PartialOrd` comparison returning wrong results
+ - Disable LTO for generated C++ library to fix metadata detection
+ - Bump MSRV to 1.71
+ - Update to Rust edition 2021 and modernize some code
+
 ## 0.5.10 - 2024-11-20
 
  - `impl From<cc::Build> for cpp_build::Config`
