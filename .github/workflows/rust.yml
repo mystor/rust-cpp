@@ -27,12 +27,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install nightly for minimal-versions
+    - name: Install old nightly for minimal-versions (produces v3 lockfile)
       if: matrix.rust == '1.65.0'
-      uses: dtolnay/rust-toolchain@nightly
+      uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: nightly-2024-02-01
     - name: Generate minimal-versions lockfile
       if: matrix.rust == '1.65.0'
-      run: cargo +nightly -Z minimal-versions generate-lockfile
+      run: cargo +nightly-2024-02-01 -Z minimal-versions generate-lockfile
     - uses: dtolnay/rust-toolchain@stable
       with:
           toolchain: ${{ matrix.rust }}
