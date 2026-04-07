@@ -1,7 +1,7 @@
 [package]
 name = "cpp"
 version = "0.5.10"
-authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint-ui.com>"]
+authors = ["Nika Layzell <nika@thelayzells.com>", "Olivier Goffart <olivier.goffart@slint.dev>"]
 edition.workspace = true
 rust-version.workspace = true
 description = "Inline C++ code closures"
