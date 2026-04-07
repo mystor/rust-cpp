@@ -286,7 +286,7 @@ void {name}({params}{comma} void* __result) {{
         }
         if class.derives("PartialOrd") {
             write!(output,
-                "{line}extern \"C\" bool __cpp_compare_{hash}(const {name} *a, const {name} *b, int cmp) {{ return rustcpp::compare_helper(*a, *b, cmp); }}\n",
+                "{line}extern \"C\" int __cpp_compare_{hash}(const {name} *a, const {name} *b, int cmp) {{ return rustcpp::compare_helper(*a, *b, cmp); }}\n",
                 line = class.line, hash = hash, name = class.cpp).unwrap();
         }
     }
