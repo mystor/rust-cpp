@@ -31,6 +31,12 @@ jobs:
       with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
+    - name: Install nightly for minimal-versions
+      if: matrix.rust == '1.65.0'
+      uses: dtolnay/rust-toolchain@nightly
+    - name: Generate minimal-versions lockfile
+      if: matrix.rust == '1.65.0'
+      run: cargo +nightly -Z minimal-versions generate-lockfile
     - name: Build
       run: cargo build --verbose
     - name: Run tests
