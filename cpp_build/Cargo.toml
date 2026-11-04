@@ -20,7 +20,7 @@ parallel = ["cc/parallel"]
 
 [dependencies]
 cc = "1.0.38"
-cpp_common = { path = "../cpp_common", version = "=0.5.11" }
+cpp_common = { path = "../cpp_common", version = "=0.5.12" }
 syn = { version = "2.0", features=["full", "visit"] }
 proc-macro2 = "1.0"
 regex = "1"

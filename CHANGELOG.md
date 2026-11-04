@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.12 - 2026-11-04
+
+ - Remove invalid no_mangle attribute, fixing build with future Rust version (#117)
+
 ## 0.5.11 - 2026-04-07
 
  - Add `static_crt` option to `cpp_build::Config`

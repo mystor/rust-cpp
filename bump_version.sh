@@ -1,11 +1,11 @@
 #!/bin/bash
 
 version=$1
-old_version=`sed -n 's/^version = "\(.\+\)"/\1/p' cpp/Cargo.toml`
+old_version=`sed -n 's/^version = "\(.\+\)"/\1/p' Cargo.toml`
 
 echo "updating $old_version to $version"
 
-for toml in */Cargo.toml; do
+for toml in */Cargo.toml Cargo.toml; do
   cp $toml $toml.bk
   cat $toml.bk \
     | sed -e 's/\(\(^\|cpp_.\+\)version = \"=\?\)'$old_version'/\1'$version'/g' \
