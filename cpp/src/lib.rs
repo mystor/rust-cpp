@@ -70,6 +70,17 @@
 //!
 //! Behind the scene, it uses the `cc` crate.
 //!
+//! `cpp_build` tells cargo to rerun the build script when one of the Rust source files it
+//! parses changes. It doesn't track C++ headers included from `cpp!` macros, or files added
+//! with `cpp_build::Config::file`, so print `cargo:rerun-if-changed` for those yourself:
+//!
+//! ```no_run
+//! fn main() {
+//!     cpp_build::build("src/lib.rs");
+//!     println!("cargo:rerun-if-changed=src/header.h");
+//! }
+//! ```
+//!
 //! ## Using external libraries
 //!
 //! Most likely you will want to link against external libraries. You need to tell cpp_build
