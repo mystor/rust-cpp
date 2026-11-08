@@ -296,6 +296,45 @@ fn test_cursor_advance() -> Result<(), LexError> {
     Ok(())
 }
 
+#[test]
+fn test_source_files() {
+    // A crate with every module layout that the parser follows, and a module that is disabled
+    // by a feature, whose file doesn't exist.
+    let lib = r#"
+        mod adjacent;
+        mod dir;
+        mod inline {
+            mod nested;
+        }
+        #[path = "renamed.rs"]
+        mod with_path;
+        #[cfg(feature = "cpp_build_test_disabled")]
+        mod disabled;
+    "#;
+    let files = [
+        ("lib.rs", lib),
+        ("adjacent.rs", "mod child;"),
+        ("adjacent/child.rs", ""),
+        ("dir/mod.rs", ""),
+        ("inline/nested.rs", ""),
+        ("renamed.rs", ""),
+    ];
+    let root = std::env::temp_dir().join(format!("cpp_build_source_files_{}", std::process::id()));
+    for (file, source) in files {
+        let path = root.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, source).unwrap();
+    }
+
+    let mut parser = Parser::default();
+    let result = parser.parse_crate(root.join("lib.rs"));
+    std::fs::remove_dir_all(&root).unwrap();
+    result.unwrap();
+
+    let expected: Vec<PathBuf> = files.iter().map(|(file, _)| root.join(file)).collect();
+    assert_eq!(parser.source_files, expected);
+}
+
 fn line_directive(path: &Path, cur: Cursor) -> String {
     let mut line =
         format!("#line {} \"{}\"\n", cur.line + 1, path.to_string_lossy().replace('\\', "\\\\"));
@@ -311,7 +350,8 @@ pub struct Parser {
     pub classes: Vec<Class>,
     pub snippets: String,
     pub callbacks_count: u32,
-    current_path: PathBuf, // The current file being parsed
+    pub source_files: Vec<PathBuf>, // Every file that was read while parsing the crate
+    current_path: PathBuf,          // The current file being parsed
     mod_dir: PathBuf,
     mod_error: Option<Error>, // An error occuring while visiting the modules
 }
@@ -323,6 +363,7 @@ impl Parser {
     }
 
     fn parse_mod(&mut self, mod_path: PathBuf, submod_dir: PathBuf) -> Result<(), Error> {
+        self.source_files.push(mod_path.clone());
         let mut s = String::new();
         let mut f = File::open(&mod_path).map_err(|_| Error::ParseCannotOpenFile {
             src_path: mod_path.to_str().unwrap().to_owned(),

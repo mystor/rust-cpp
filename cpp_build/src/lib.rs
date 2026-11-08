@@ -399,7 +399,8 @@ Failed to create output object directory."#,
 /// `cc::Build` object.
 pub struct Config {
     cc: cc::Build,
-    std_flag_set: bool, // true if the -std flag was specified
+    std_flag_set: bool,   // true if the -std flag was specified
+    cargo_metadata: bool, // false if cargo metadata output was disabled
 }
 
 impl Default for Config {
@@ -411,10 +412,14 @@ impl Default for Config {
 /// Convert from a preconfigured [`cc::Build`] object to [`Config`].
 /// Note that this will ensure C++ is enabled and add the proper include
 /// directories to work with `cpp`.
+///
+/// If the [`cc::Build`] has `cargo_metadata(false)`, also call
+/// [`Config::cargo_metadata`] with `false`. cpp_build can't read that setting
+/// from `cc`, so otherwise it still prints `cargo:rerun-if-changed` lines.
 impl From<cc::Build> for Config {
     fn from(mut cc: cc::Build) -> Self {
         cc.cpp(true).include(cargo_manifest_dir());
-        Self { cc, std_flag_set: false }
+        Self { cc, std_flag_set: false, cargo_metadata: true }
     }
 }
 
@@ -593,9 +598,10 @@ impl Config {
     }
 
     /// Define whether metadata should be emitted for cargo allowing it to
-    /// automatically link the binary. Defaults to `true`.
+    /// automatically link the binary, and to rerun the build script when a
+    /// parsed Rust source file changes. Defaults to `true`.
     pub fn cargo_metadata(&mut self, cargo_metadata: bool) -> &mut Self {
-        // XXX: Use this to control the cargo metadata which rust-cpp produces
+        self.cargo_metadata = cargo_metadata;
         self.cc.cargo_metadata(cargo_metadata);
         self
     }
@@ -639,7 +645,18 @@ impl Config {
 
         // Parse the crate
         let mut visitor = parser::Parser::default();
-        if let Err(err) = visitor.parse_crate(crate_root.as_ref().to_owned()) {
+        let result = visitor.parse_crate(crate_root.as_ref().to_owned());
+
+        // `cc` prints `rerun-if-env-changed` lines, and any `rerun-if` line stops Cargo from
+        // rerunning the build script when a file in the package changes. So tell Cargo about
+        // every parsed file, otherwise new or changed `cpp!` macros are not extracted.
+        if self.cargo_metadata {
+            for path in &visitor.source_files {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+
+        if let Err(err) = result {
             warnln!(
                 r#"-- rust-cpp parse error --
 There was an error parsing the crate for the rust-cpp build script:
