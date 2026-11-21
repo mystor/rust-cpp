@@ -10,7 +10,9 @@ mod strnom;
 
 use cpp_common::*;
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::HashSet;
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -401,6 +403,7 @@ pub struct Config {
     cc: cc::Build,
     std_flag_set: bool,   // true if the -std flag was specified
     cargo_metadata: bool, // false if cargo metadata output was disabled
+    files: Vec<PathBuf>,  // extra C++ sources added with `file()`
 }
 
 impl Default for Config {
@@ -416,10 +419,14 @@ impl Default for Config {
 /// If the [`cc::Build`] has `cargo_metadata(false)`, also call
 /// [`Config::cargo_metadata`] with `false`. cpp_build can't read that setting
 /// from `cc`, so otherwise it still prints `cargo:rerun-if-changed` lines.
+///
+/// Sources already added to the [`cc::Build`] are compiled, but cpp_build can't
+/// list them, so editing them doesn't rerun the build script. Add them with
+/// [`Config::file`] after the conversion instead.
 impl From<cc::Build> for Config {
     fn from(mut cc: cc::Build) -> Self {
         cc.cpp(true).include(cargo_manifest_dir());
-        Self { cc, std_flag_set: false, cargo_metadata: true }
+        Self { cc, std_flag_set: false, cargo_metadata: true, files: Vec::new() }
     }
 }
 
@@ -471,6 +478,7 @@ impl Config {
     // XXX: Make sure this works with sizes logic
     /// Add a file which will be compiled
     pub fn file<P: AsRef<Path>>(&mut self, p: P) -> &mut Self {
+        self.files.push(p.as_ref().to_owned());
         self.cc.file(p);
         self
     }
@@ -689,12 +697,196 @@ In order to provide a better error message, the build script will exit successfu
         self.cc.flag_if_supported("-fno-lto");
 
         // Build the C++ library
-        if let Err(e) = self.cc.file(filename).try_compile(LIB_NAME) {
+        if let Err(e) = self.cc.file(&filename).try_compile(LIB_NAME) {
             let _ = writeln!(std::io::stderr(), "\n\nerror occurred: {}\n\n", e);
             #[cfg(not(feature = "docs-only"))]
             std::process::exit(1);
         }
+
+        if self.cargo_metadata {
+            self.print_cpp_dependencies(&filename);
+        }
     }
+
+    /// Tell Cargo to rerun the build script when a header or a `file()` source changes, by asking
+    /// the compiler which files each source reads. If that fails, those files are left untracked.
+    fn print_cpp_dependencies(&self, generated: &Path) {
+        let tool = self.cc.get_compiler();
+        let current_dir = env::current_dir().unwrap_or_default();
+        let mut printed = HashSet::new();
+        let sources = std::iter::once(generated).chain(self.files.iter().map(PathBuf::as_path));
+        for source in sources {
+            let deps = if tool.is_like_msvc() {
+                msvc_dependencies(&tool, source)
+            } else {
+                make_dependencies(&tool, source)
+            };
+            for dep in deps {
+                let dep = current_dir.join(dep);
+                // Files in `OUT_DIR` are regenerated on every run, and a path that doesn't exist
+                // counts as changed, so either would make Cargo rerun the build script every time.
+                if dep.starts_with(out_dir()) || !dep.is_file() {
+                    continue;
+                }
+                // Keep paths inside the package relative, so the build can be moved.
+                let dep = dep.strip_prefix(cargo_manifest_dir()).unwrap_or(&dep);
+                if printed.insert(dep.to_owned()) {
+                    println!("cargo:rerun-if-changed={}", dep.display());
+                }
+            }
+        }
+    }
+}
+
+/// The make target name passed to the compiler with `-MT`.
+const DEPS_TARGET: &str = "cpp_build_deps";
+
+/// Ask GCC or Clang which files `source` reads, using `-MM` to leave out system headers.
+fn make_dependencies(tool: &cc::Tool, source: &Path) -> Vec<PathBuf> {
+    let output = tool.to_command().args(["-MM", "-MT", DEPS_TARGET]).arg(source).output();
+    match output {
+        Ok(output) if output.status.success() => {
+            let output = String::from_utf8_lossy(&output.stdout);
+            parse_make_deps(&output).into_iter().map(PathBuf::from).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Ask cl.exe or clang-cl which files `source` reads. `/Zs` only checks the syntax, and
+/// `/showIncludes` lists the headers but not `source` itself, so `source` is added separately.
+fn msvc_dependencies(tool: &cc::Tool, source: &Path) -> Vec<PathBuf> {
+    let mut command = tool.to_command();
+    // Keep the output in English on localized systems, as rustc and cc do.
+    command.env("VSLANG", "1033");
+    // `Tool::is_like_clang_cl` needs cc 1.2.8, and cpp_build supports older versions.
+    let file_name = tool.path().file_name().unwrap_or_default().to_string_lossy();
+    if file_name.to_ascii_lowercase().contains("clang-cl") {
+        command.args(["/Zs", "/showIncludes:user", "--"]).arg(source);
+    } else {
+        command.args(["/Zs", "/showIncludes"]);
+        // cl.exe treats a file it doesn't recognise, like `.cc`, as an object unless given `-Tp`.
+        if source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("c")) {
+            command.arg(source);
+        } else {
+            let mut arg = OsString::from("-Tp");
+            arg.push(source);
+            command.arg(arg);
+        }
+    }
+    // cl.exe doesn't support `/showIncludes:user`, so leave out system headers by skipping anything
+    // under the `INCLUDE` directories.
+    let include = command
+        .get_envs()
+        .find(|(key, _)| key.eq_ignore_ascii_case("INCLUDE"))
+        .map_or_else(|| env::var_os("INCLUDE"), |(_, value)| value.map(OsStr::to_owned))
+        .unwrap_or_default();
+    let system_dirs = split_include_dirs(&include);
+
+    let output = match command.output() {
+        Ok(output) if output.status.success() => output,
+        _ => return Vec::new(),
+    };
+    // cl.exe prints the list to stdout, or to stderr when preprocessing with `/E`, `/EP` or `/P`,
+    // so read both.
+    let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&output.stderr));
+    let headers = parse_show_includes(&text).into_iter().map(PathBuf::from);
+    std::iter::once(source.to_owned())
+        .chain(headers.filter(|header| !system_dirs.iter().any(|dir| header.starts_with(dir))))
+        .collect()
+}
+
+/// Split an `INCLUDE` value into its directories, dropping empty entries such as the one after
+/// a trailing `;`, because an empty path matches every header.
+fn split_include_dirs(include: &OsStr) -> Vec<PathBuf> {
+    env::split_paths(include).filter(|dir| !dir.as_os_str().is_empty()).collect()
+}
+
+#[test]
+fn test_split_include_dirs() {
+    assert!(split_include_dirs(OsStr::new("")).is_empty());
+    let include = env::join_paths(["inc", "", "sdk"]).unwrap();
+    assert_eq!(split_include_dirs(&include), [Path::new("inc"), Path::new("sdk")]);
+}
+
+/// Parse the files listed in `/showIncludes` output, where extra spaces show how deeply a header
+/// is nested.
+fn parse_show_includes(output: &str) -> Vec<&str> {
+    output
+        .lines()
+        .filter_map(|line| line.strip_prefix("Note: including file:"))
+        .map(str::trim)
+        .filter(|file| !file.is_empty())
+        .collect()
+}
+
+#[test]
+fn test_parse_show_includes() {
+    let output = "cpp_closures.cpp\r\n\
+                  Note: including file: D:\\crate\\src/header.h\r\n\
+                  Note: including file:  D:\\crate\\src\\nested.h\r\n\
+                  Note: including file: ../vendor/include\\Dir With Space\\util.h\r\n\
+                  cpp_closures.cpp(3): warning C4100: unreferenced parameter\r\n";
+    assert_eq!(
+        parse_show_includes(output),
+        [
+            "D:\\crate\\src/header.h",
+            "D:\\crate\\src\\nested.h",
+            "../vendor/include\\Dir With Space\\util.h",
+        ]
+    );
+    assert!(parse_show_includes("cl : Command line warning D9002 : ignoring option").is_empty());
+}
+
+/// Parse the files listed in `-MM -MT cpp_build_deps` output, which uses Makefile syntax.
+fn parse_make_deps(output: &str) -> Vec<String> {
+    let Some(deps) =
+        output.trim_start().strip_prefix(DEPS_TARGET).and_then(|d| d.strip_prefix(':'))
+    else {
+        return Vec::new();
+    };
+    let mut files = Vec::new();
+    let mut file = String::new();
+    let mut chars = deps.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            // An escaped space or `#` is part of the file name.
+            '\\' if matches!(chars.peek(), Some(' ' | '#')) => file.push(chars.next().unwrap()),
+            '\\' if matches!(chars.peek(), Some('\n' | '\r')) => {}
+            '$' if chars.peek() == Some(&'$') => {
+                chars.next();
+                file.push('$');
+            }
+            c if c.is_whitespace() => {
+                if !file.is_empty() {
+                    files.push(std::mem::take(&mut file));
+                }
+            }
+            c => file.push(c),
+        }
+    }
+    if !file.is_empty() {
+        files.push(file);
+    }
+    files
+}
+
+#[test]
+fn test_parse_make_deps() {
+    let output = "cpp_build_deps: /out/rust_cpp/cpp_closures.cpp src/header.h \\\n \
+                  ../vendor/my\\ lib.h C:\\include\\a.h dir/\\#odd$$name.h\r\n";
+    assert_eq!(
+        parse_make_deps(output),
+        [
+            "/out/rust_cpp/cpp_closures.cpp",
+            "src/header.h",
+            "../vendor/my lib.h",
+            "C:\\include\\a.h",
+            "dir/#odd$name.h",
+        ]
+    );
+    assert!(parse_make_deps("something else: a.h").is_empty());
 }
 
 /// Run the `cpp` build process on the crate with a root at the given path.
